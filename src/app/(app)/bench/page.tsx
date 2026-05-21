@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
-import { getMondayOf, addWeeks } from "@/lib/weeks";
-import { getCachedSimpleUsers, getCachedAllocationsMinimal } from "@/lib/queries";
+import { getMondayOf, addWeeks, totalWorkingDays } from "@/lib/weeks";
+import { getCachedSimpleUsers, getCachedAllocationsMinimal, getCachedPublicHolidays } from "@/lib/queries";
 import { BenchClient } from "./BenchClient";
 
 interface PageProps {
@@ -23,34 +23,24 @@ export default async function BenchPage({ searchParams }: PageProps) {
   // Fetch all allocation weeks in the range
   const rangeEnd = addWeeks(safeToDate, 1); // exclusive upper bound
 
-  const [users, rawAllocations] = await Promise.all([
+  const [users, rawAllocations, rawHolidays] = await Promise.all([
     getCachedSimpleUsers(),
     getCachedAllocationsMinimal(fromDate.toISOString(), rangeEnd.toISOString()),
+    getCachedPublicHolidays(),
   ]);
 
   // Convert ISO strings back to Date objects for server-side calculations
   const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
-
-  // Count working days per allocation that overlap the selected range
-  function workingDaysOverlap(aStart: Date, aEnd: Date, rStart: Date, rEnd: Date): number {
-    const oStart = aStart > rStart ? aStart : rStart;
-    const oEnd   = aEnd   < rEnd   ? aEnd   : rEnd;
-    if (oStart > oEnd) return 0;
-    let days = 0;
-    const cur = new Date(oStart);
-    while (cur <= oEnd) {
-      const d = cur.getDay();
-      if (d >= 1 && d <= 5) days++;
-      cur.setDate(cur.getDate() + 1);
-    }
-    return days;
-  }
+  const holidays    = new Set(rawHolidays.map((h) => h.date));
 
   const bench = users.map((u) => {
     const allocated = allocations
       .filter((a) => a.userId === u.id)
       .reduce((s, a) => {
-        const days = workingDaysOverlap(a.startDate, a.endDate, fromDate, safeToDate);
+        // Clamp to selected range, then count holiday-aware working days
+        const oStart = a.startDate > fromDate  ? a.startDate : fromDate;
+        const oEnd   = a.endDate   < safeToDate ? a.endDate  : safeToDate;
+        const days   = totalWorkingDays(oStart, oEnd, holidays);
         return s + days * a.hoursPerDay;
       }, 0);
     const totalCapacity = u.capacity * weekCount;

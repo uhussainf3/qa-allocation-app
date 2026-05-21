@@ -22,7 +22,8 @@ type EditState  = {
   startDate: string; endDate: string; hoursPerDay: number;
   projName: string; engineerName: string;
 };
-type ViewData   = { users: User[]; allocations: Allocation[]; projects: Project[] };
+type Holiday    = { id: string; date: string; name: string };
+type ViewData   = { users: User[]; allocations: Allocation[]; projects: Project[]; holidays: Holiday[] };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -74,7 +75,12 @@ function toMonday(dateStr: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-function workingDaysInWeek(weekMonISO: string, allocStart: string, allocEnd: string): number {
+function workingDaysInWeek(
+  weekMonISO: string,
+  allocStart: string,
+  allocEnd:   string,
+  holidays?:  Set<string>
+): number {
   const wMon   = new Date(weekMonISO + "T00:00:00");
   const wFri   = new Date(wMon); wFri.setDate(wMon.getDate() + 4);
   const aStart = new Date(allocStart + "T00:00:00");
@@ -85,8 +91,9 @@ function workingDaysInWeek(weekMonISO: string, allocStart: string, allocEnd: str
   let days = 0;
   const cur = new Date(oStart);
   while (cur <= oEnd) {
-    const d = cur.getDay();
-    if (d >= 1 && d <= 5) days++;
+    const d   = cur.getDay();
+    const ymd = cur.toISOString().slice(0, 10);
+    if (d >= 1 && d <= 5 && !holidays?.has(ymd)) days++;
     cur.setDate(cur.getDate() + 1);
   }
   return days;
@@ -148,7 +155,10 @@ export function AllocationsClient({ currentUserRole }: Props) {
   const [users,       setUsers]       = useState<User[]>([]);
   const [allocations, setAllocations] = useState<Allocation[]>([]);
   const [projects,    setProjects]    = useState<Project[]>([]);
+  const [holidays,    setHolidays]    = useState<Holiday[]>([]);
   const [loading,     setLoading]     = useState(true);
+
+  const holidaySet = useMemo(() => new Set(holidays.map((h) => h.date)), [holidays]);
 
   // UI state
   const [unit,          setUnit]          = useState<"hrs" | "pct">("hrs");
@@ -176,6 +186,7 @@ export function AllocationsClient({ currentUserRole }: Props) {
       setUsers(data.users);
       setAllocations(data.allocations);
       setProjects(data.projects);
+      setHolidays(data.holidays ?? []);
       writeCache(nWeeks, data);
     } catch {
       // keep whatever is in state already
@@ -191,6 +202,7 @@ export function AllocationsClient({ currentUserRole }: Props) {
       setUsers(cached.users);
       setAllocations(cached.allocations);
       setProjects(cached.projects);
+      setHolidays(cached.holidays ?? []);
       setLoading(false);
       fetchData(activeWeeks, true); // background refresh
     } else {
@@ -217,7 +229,7 @@ export function AllocationsClient({ currentUserRole }: Props) {
         m[a.userId][key] = weeks.map(() => ({ hours: 0, id: null, hoursPerDay: 0, startDate: "", endDate: "" }));
       }
       weeks.forEach((w, wIdx) => {
-        const days = workingDaysInWeek(w.date.slice(0, 10), a.startDate.slice(0, 10), a.endDate.slice(0, 10));
+        const days = workingDaysInWeek(w.date.slice(0, 10), a.startDate.slice(0, 10), a.endDate.slice(0, 10), holidaySet);
         if (days > 0) {
           const prev = m[a.userId][key][wIdx];
           m[a.userId][key][wIdx] = {
@@ -231,7 +243,7 @@ export function AllocationsClient({ currentUserRole }: Props) {
       });
     });
     return m;
-  }, [allocations, users, weeks]);
+  }, [allocations, users, weeks, holidaySet]);
 
   const userWeekHours  = (userId: string, wIdx: number) =>
     Object.values(allocMap[userId] ?? {}).reduce((s, arr) => s + (arr[wIdx]?.hours ?? 0), 0);

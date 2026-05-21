@@ -272,3 +272,13 @@ model NotificationPreference {
   userId String @unique
   prefs  String
 }
+
+// Public holidays — excluded from working-day calculations
+model PublicHoliday {
+  id        String   @id @default(cuid())
+  date      DateTime // stored at UTC midnight
+  name      String
+  createdAt DateTime @default(now())
+
+  @@unique([date])
+}

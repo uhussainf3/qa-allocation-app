@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
-import { getNextNWeeks, getWeekLabel, getMondayOf } from "@/lib/weeks";
-import { getCachedSimpleUsers, getCachedAllocationsMinimal } from "@/lib/queries";
+import { getNextNWeeks, getWeekLabel, getMondayOf, workingDaysInWeek } from "@/lib/weeks";
+import { getCachedSimpleUsers, getCachedAllocationsMinimal, getCachedPublicHolidays } from "@/lib/queries";
 
 export default async function ForecastPage() {
   await auth();
@@ -8,28 +8,20 @@ export default async function ForecastPage() {
   const weekEnd = new Date(weeks90[weeks90.length - 1]);
   weekEnd.setDate(weekEnd.getDate() + 7);
 
-  const [users, rawAllocations] = await Promise.all([
+  const [users, rawAllocations, rawHolidays] = await Promise.all([
     getCachedSimpleUsers(),
     getCachedAllocationsMinimal(weeks90[0].toISOString(), weekEnd.toISOString()),
+    getCachedPublicHolidays(),
   ]);
 
   // Convert ISO strings back to Date objects for server-side calculations
   const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
+  const holidays    = new Set(rawHolidays.map((h) => h.date));
 
   const totalCapacityPerWeek = users.reduce((s, u) => s + u.capacity, 0);
 
-  function workDaysInWeek(wMon: Date, aStart: Date, aEnd: Date): number {
-    const wFri = new Date(wMon); wFri.setDate(wMon.getDate() + 4);
-    const oS = aStart > wMon ? aStart : wMon;
-    const oE = aEnd   < wFri ? aEnd   : wFri;
-    if (oS > oE) return 0;
-    let d = 0; const c = new Date(oS);
-    while (c <= oE) { const dw = c.getDay(); if (dw >= 1 && dw <= 5) d++; c.setDate(c.getDate() + 1); }
-    return d;
-  }
-
   const weeksData = weeks90.map((w, i) => {
-    const demand = allocations.reduce((s, a) => s + workDaysInWeek(w, a.startDate, a.endDate) * a.hoursPerDay, 0);
+    const demand = allocations.reduce((s, a) => s + workingDaysInWeek(w, a.startDate, a.endDate, holidays) * a.hoursPerDay, 0);
     const utilPct = totalCapacityPerWeek > 0 ? Math.round((demand / totalCapacityPerWeek) * 100) : 0;
     return { label: getWeekLabel(w), demand, capacity: totalCapacityPerWeek, utilPct, period: i < 4 ? "30d" : i < 9 ? "60d" : "90d" };
   });

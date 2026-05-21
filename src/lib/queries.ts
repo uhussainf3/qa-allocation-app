@@ -235,6 +235,18 @@ export const getCachedAllAllocationsForProjects = unstable_cache(
   { revalidate: TTL, tags: ["allocations", "users"] }
 );
 
+// ─── Public Holidays ──────────────────────────────────────────────────────────
+
+/** All public holidays (YYYY-MM-DD strings), ordered by date. */
+export const getCachedPublicHolidays = unstable_cache(
+  async () => {
+    const rows = await prisma.publicHoliday.findMany({ orderBy: { date: "asc" } });
+    return rows.map((h) => ({ id: h.id, date: h.date.toISOString().slice(0, 10), name: h.name }));
+  },
+  ["public-holidays"],
+  { revalidate: TTL, tags: ["holidays"] }
+);
+
 // ─── Leaves ───────────────────────────────────────────────────────────────────
 
 /** Approved leaves overlapping a range (for Capacity page). Dates as ISO strings. */

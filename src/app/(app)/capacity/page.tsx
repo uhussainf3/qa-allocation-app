@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
-import { getNextNWeeks, getWeekLabel, getMondayOf } from "@/lib/weeks";
-import { getCachedSimpleUsers, getCachedAllocationsMinimal, getCachedApprovedLeaves } from "@/lib/queries";
+import { getNextNWeeks, getWeekLabel, getMondayOf, workingDaysInWeek } from "@/lib/weeks";
+import { getCachedSimpleUsers, getCachedAllocationsMinimal, getCachedApprovedLeaves, getCachedPublicHolidays } from "@/lib/queries";
 
 export default async function CapacityPage() {
   await auth();
@@ -11,30 +11,22 @@ export default async function CapacityPage() {
   const fromISO = weeks[0].toISOString();
   const toISO   = weekEnd.toISOString();
 
-  const [users, rawAllocations, rawLeaves] = await Promise.all([
+  const [users, rawAllocations, rawLeaves, rawHolidays] = await Promise.all([
     getCachedSimpleUsers(),
     getCachedAllocationsMinimal(fromISO, toISO),
     getCachedApprovedLeaves(fromISO, toISO),
+    getCachedPublicHolidays(),
   ]);
 
   // Convert ISO strings back to Date objects for server-side calculations
   const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
   const leaves      = rawLeaves.map((l) => ({ ...l, startDate: new Date(l.startDate), endDate: new Date(l.endDate) }));
-
-  function workDaysInWeek(wMon: Date, aStart: Date, aEnd: Date): number {
-    const wFri = new Date(wMon); wFri.setDate(wMon.getDate() + 4);
-    const oS = aStart > wMon ? aStart : wMon;
-    const oE = aEnd   < wFri ? aEnd   : wFri;
-    if (oS > oE) return 0;
-    let d = 0; const c = new Date(oS);
-    while (c <= oE) { const dw = c.getDay(); if (dw >= 1 && dw <= 5) d++; c.setDate(c.getDate() + 1); }
-    return d;
-  }
+  const holidays    = new Set(rawHolidays.map((h) => h.date));
 
   function weekHours(userId: string, monday: Date) {
     return allocations
       .filter((a) => a.userId === userId)
-      .reduce((s, a) => s + workDaysInWeek(monday, a.startDate, a.endDate) * a.hoursPerDay, 0);
+      .reduce((s, a) => s + workingDaysInWeek(monday, a.startDate, a.endDate, holidays) * a.hoursPerDay, 0);
   }
 
   function hasLeave(userId: string, monday: Date) {

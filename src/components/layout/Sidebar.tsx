@@ -41,8 +41,9 @@ const NAV: NavGroup[] = [
   {
     group: "Admin",
     items: [
-      { href: "/import", label: "Import" },
-      { href: "/notifications", label: "Notifications" },
+      { href: "/import",         label: "Import"         },
+      { href: "/notifications",  label: "Notifications"  },
+      { href: "/settings",       label: "Settings"       },
     ],
     roles: ["ADMIN", "PROJECT_MANAGER"],
   },
