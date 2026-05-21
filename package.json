@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3000",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start --port 3000",
     "studio": "prisma studio --port 5555",
+    "postinstall": "prisma generate",
     "lint": "eslint"
   },
   "dependencies": {
