@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 export default function Loading() {
   return (
     <div className="page">
@@ -66,7 +68,7 @@ export default function Loading() {
 }
 
 /** Shimmer skeleton style helper */
-function sk(width: number, height: number, radius = 4): React.CSSProperties {
+function sk(width: number, height: number, radius = 4): CSSProperties {
   return {
     width,
     height,
