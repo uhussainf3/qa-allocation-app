@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { AllocationsClient } from "./AllocationsClient";
 import { getNextNWeeks, getWeekLabel, getWeekRange, getMondayOf } from "@/lib/weeks";
+import { getCachedActiveUsers, getCachedAllocationsInRange, getCachedActiveProjects } from "@/lib/queries";
 import type { Role } from "@/types/enums";
 
 interface PageProps {
@@ -21,26 +21,9 @@ export default async function AllocationsPage({ searchParams }: PageProps) {
   to.setDate(to.getDate() + nWeeks * 7);
 
   const [users, allocations, projects] = await Promise.all([
-    prisma.user.findMany({
-      where:   { isActive: true },
-      select:  { id: true, name: true, email: true, image: true, capacity: true, role: true },
-      orderBy: { name: "asc" },
-    }),
-    // Fetch any allocation that overlaps the displayed range
-    prisma.allocation.findMany({
-      where: {
-        startDate: { lt: to },
-        endDate:   { gte: from },
-      },
-      include: {
-        project: { select: { id: true, name: true, code: true, color: true } },
-        task:    { select: { id: true, name: true } },
-      },
-    }),
-    prisma.project.findMany({
-      where:  { status: "ACTIVE" },
-      select: { id: true, name: true, code: true, color: true },
-    }),
+    getCachedActiveUsers(),
+    getCachedAllocationsInRange(from.toISOString(), to.toISOString()),
+    getCachedActiveProjects(),
   ]);
 
   const toMeta = (w: Date, i: number) => ({
@@ -53,13 +36,7 @@ export default async function AllocationsPage({ searchParams }: PageProps) {
   return (
     <AllocationsClient
       users={users.map((u) => ({ ...u, role: u.role as Role }))}
-      allocations={allocations.map((a) => ({
-        ...a,
-        startDate: a.startDate.toISOString(),
-        endDate:   a.endDate.toISOString(),
-        createdAt: a.createdAt.toISOString(),
-        updatedAt: a.updatedAt.toISOString(),
-      }))}
+      allocations={allocations}
       projects={projects}
       weeks={weeks.map(toMeta)}
       allWeeks={allWeeks.map(toMeta)}

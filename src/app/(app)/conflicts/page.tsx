@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { getNextNWeeks, getMondayOf } from "@/lib/weeks";
+import { getCachedSimpleUsers, getCachedConflictAllocations } from "@/lib/queries";
 
 export default async function ConflictsPage() {
   await auth();
@@ -8,13 +8,13 @@ export default async function ConflictsPage() {
   const weekEnd = new Date(weeks[weeks.length - 1]);
   weekEnd.setDate(weekEnd.getDate() + 7);
 
-  const [users, allocations] = await Promise.all([
-    prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, capacity: true } }),
-    prisma.allocation.findMany({
-      where: { startDate: { lt: weekEnd }, endDate: { gte: weeks[0] } },
-      include: { project: { select: { id: true, name: true, color: true } } },
-    }),
+  const [users, rawAllocations] = await Promise.all([
+    getCachedSimpleUsers(),
+    getCachedConflictAllocations(weeks[0].toISOString(), weekEnd.toISOString()),
   ]);
+
+  // Convert ISO strings back to Date objects for server-side calculations
+  const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
 
   type Conflict = {
     id: string; severity: string; engineer: string; week: string;

@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ok, err, unauthorized, notFound } from "@/lib/apiResponse";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -62,6 +63,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     data: { actorId: session.user.id, action: "updated", targetType: "Project", targetId: id, projectId: id },
   });
 
+  revalidateTag("projects", "max");
   return ok(project);
 }
 
@@ -81,5 +83,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     data: { actorId: session.user.id, action: "deleted", targetType: "Project", targetId: id },
   });
 
+  revalidateTag("projects", "max");
   return ok({ success: true });
 }

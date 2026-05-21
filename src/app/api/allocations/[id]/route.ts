@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ok, err, unauthorized, notFound } from "@/lib/apiResponse";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -45,6 +46,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     },
   });
 
+  revalidateTag("allocations", "max");
   return ok(allocation);
 }
 
@@ -70,5 +72,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     },
   });
 
+  revalidateTag("allocations", "max");
   return ok({ success: true });
 }

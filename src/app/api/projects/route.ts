@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ok, err, unauthorized } from "@/lib/apiResponse";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 const createSchema = z.object({
@@ -65,5 +66,6 @@ export async function POST(req: Request) {
     },
   });
 
+  revalidateTag("projects", "max");
   return ok(project, 201);
 }

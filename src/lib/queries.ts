@@ -1,0 +1,253 @@
+/**
+ * Cached database query functions using Next.js unstable_cache.
+ * Cache TTL: 60 seconds with tag-based on-demand invalidation.
+ *
+ * Tags:
+ *   "users"       — invalidated when users change
+ *   "projects"    — invalidated when projects change
+ *   "allocations" — invalidated when allocations change
+ *   "leaves"      — invalidated when leave records change
+ */
+import { unstable_cache } from "next/cache";
+import { prisma } from "./prisma";
+
+const TTL = 60; // seconds
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+/** Active users with full select (for Allocations page, dropdowns). */
+export const getCachedActiveUsers = unstable_cache(
+  async () =>
+    prisma.user.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, email: true, image: true, capacity: true, role: true },
+      orderBy: { name: "asc" },
+    }),
+  ["active-users"],
+  { revalidate: TTL, tags: ["users"] }
+);
+
+/** Active users — minimal select (capacity + bench pages). */
+export const getCachedSimpleUsers = unstable_cache(
+  async () =>
+    prisma.user.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, email: true, capacity: true, role: true },
+      orderBy: { name: "asc" },
+    }),
+  ["simple-users"],
+  { revalidate: TTL, tags: ["users"] }
+);
+
+// ─── Projects ─────────────────────────────────────────────────────────────────
+
+/** Active projects — minimal select for dropdowns. */
+export const getCachedActiveProjects = unstable_cache(
+  async () =>
+    prisma.project.findMany({
+      where: { status: "ACTIVE" },
+      select: { id: true, name: true, code: true, color: true },
+    }),
+  ["active-projects"],
+  { revalidate: TTL, tags: ["projects"] }
+);
+
+/**
+ * Full projects data for the Projects page.
+ * Dates are pre-serialised to ISO strings so the result is safe for
+ * JSON caching and passes directly to ProjectsClient.
+ */
+export const getCachedProjectsFull = unstable_cache(
+  async () => {
+    const [projects, hoursConsumed] = await Promise.all([
+      prisma.project.findMany({
+        include: {
+          tasks: {
+            include: { subtasks: { orderBy: { order: "asc" } } },
+            where: { parentId: null },
+            orderBy: { order: "asc" },
+          },
+          _count: { select: { allocations: true, hoursLogs: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.hoursLog.groupBy({ by: ["projectId"], _sum: { hours: true } }),
+    ]);
+
+    return {
+      projects: projects.map((p) => ({
+        ...p,
+        startDate: p.startDate?.toISOString() ?? null,
+        endDate:   p.endDate?.toISOString()   ?? null,
+        createdAt: p.createdAt.toISOString(),
+        updatedAt: p.updatedAt.toISOString(),
+        tasks: p.tasks.map((t) => ({
+          ...t,
+          createdAt: t.createdAt.toISOString(),
+          updatedAt: t.updatedAt.toISOString(),
+          subtasks: t.subtasks.map((s) => ({
+            ...s,
+            createdAt: s.createdAt.toISOString(),
+            updatedAt: s.updatedAt.toISOString(),
+          })),
+        })),
+      })),
+      hoursConsumed,
+    };
+  },
+  ["projects-full"],
+  { revalidate: TTL, tags: ["projects"] }
+);
+
+// ─── Allocations ──────────────────────────────────────────────────────────────
+
+/** All allocations (manages-allocations list). Dates as ISO strings. */
+export const getCachedAllAllocationsList = unstable_cache(
+  async () => {
+    const rows = await prisma.allocation.findMany({
+      include: {
+        user:    { select: { id: true, name: true, email: true, image: true, capacity: true, role: true } },
+        project: { select: { id: true, name: true, code: true, color: true } },
+        task:    { select: { id: true, name: true } },
+      },
+      orderBy: [{ startDate: "asc" }, { user: { name: "asc" } }],
+    });
+    return rows.map((a) => ({
+      ...a,
+      startDate: a.startDate.toISOString(),
+      endDate:   a.endDate.toISOString(),
+      createdAt: a.createdAt.toISOString(),
+      updatedAt: a.updatedAt.toISOString(),
+    }));
+  },
+  ["allocations-list"],
+  { revalidate: TTL, tags: ["allocations", "users", "projects"] }
+);
+
+/**
+ * Allocations overlapping a date range — includes project + task.
+ * Used by the Allocations grid page. Dates as ISO strings.
+ */
+const _getAllocationsInRange = unstable_cache(
+  async (fromISO: string, toISO: string) => {
+    const rows = await prisma.allocation.findMany({
+      where: {
+        startDate: { lt: new Date(toISO) },
+        endDate:   { gte: new Date(fromISO) },
+      },
+      include: {
+        project: { select: { id: true, name: true, code: true, color: true } },
+        task:    { select: { id: true, name: true } },
+      },
+    });
+    return rows.map((a) => ({
+      ...a,
+      startDate: a.startDate.toISOString(),
+      endDate:   a.endDate.toISOString(),
+      createdAt: a.createdAt.toISOString(),
+      updatedAt: a.updatedAt.toISOString(),
+    }));
+  },
+  ["allocations-in-range"],
+  { revalidate: TTL, tags: ["allocations"] }
+);
+export const getCachedAllocationsInRange = (from: string, to: string) =>
+  _getAllocationsInRange(from, to);
+
+/**
+ * Minimal allocations overlapping a range (no relations).
+ * Used by capacity / bench / forecast pages. Dates as ISO strings.
+ */
+const _getAllocationsMinimal = unstable_cache(
+  async (fromISO: string, toISO: string) => {
+    const rows = await prisma.allocation.findMany({
+      where: {
+        startDate: { lt: new Date(toISO) },
+        endDate:   { gte: new Date(fromISO) },
+      },
+      select: { userId: true, startDate: true, endDate: true, hoursPerDay: true },
+    });
+    return rows.map((a) => ({
+      userId:      a.userId,
+      hoursPerDay: a.hoursPerDay,
+      startDate:   a.startDate.toISOString(),
+      endDate:     a.endDate.toISOString(),
+    }));
+  },
+  ["allocations-minimal"],
+  { revalidate: TTL, tags: ["allocations"] }
+);
+export const getCachedAllocationsMinimal = (from: string, to: string) =>
+  _getAllocationsMinimal(from, to);
+
+/**
+ * Allocations with project for the Conflicts page. Dates as ISO strings.
+ */
+const _getConflictAllocations = unstable_cache(
+  async (fromISO: string, toISO: string) => {
+    const rows = await prisma.allocation.findMany({
+      where: {
+        startDate: { lt: new Date(toISO) },
+        endDate:   { gte: new Date(fromISO) },
+      },
+      include: { project: { select: { id: true, name: true, color: true } } },
+    });
+    return rows.map((a) => ({
+      ...a,
+      startDate: a.startDate.toISOString(),
+      endDate:   a.endDate.toISOString(),
+      createdAt: a.createdAt.toISOString(),
+      updatedAt: a.updatedAt.toISOString(),
+    }));
+  },
+  ["allocations-conflicts"],
+  { revalidate: TTL, tags: ["allocations"] }
+);
+export const getCachedConflictAllocations = (from: string, to: string) =>
+  _getConflictAllocations(from, to);
+
+/**
+ * All allocations (minimal) for the Projects page allocated-hours calc.
+ * No date range filter — needs all time. Dates as ISO strings.
+ */
+export const getCachedAllAllocationsForProjects = unstable_cache(
+  async () => {
+    const rows = await prisma.allocation.findMany({
+      select: { projectId: true, startDate: true, endDate: true, hoursPerDay: true },
+    });
+    return rows.map((a) => ({
+      projectId:   a.projectId,
+      hoursPerDay: a.hoursPerDay,
+      startDate:   a.startDate.toISOString(),
+      endDate:     a.endDate.toISOString(),
+    }));
+  },
+  ["allocations-for-projects"],
+  { revalidate: TTL, tags: ["allocations"] }
+);
+
+// ─── Leaves ───────────────────────────────────────────────────────────────────
+
+/** Approved leaves overlapping a range (for Capacity page). Dates as ISO strings. */
+const _getApprovedLeaves = unstable_cache(
+  async (fromISO: string, toISO: string) => {
+    const rows = await prisma.leave.findMany({
+      where: {
+        status:    "APPROVED",
+        startDate: { lt: new Date(toISO) },
+        endDate:   { gte: new Date(fromISO) },
+      },
+      select: { userId: true, startDate: true, endDate: true, type: true },
+    });
+    return rows.map((l) => ({
+      userId:    l.userId,
+      type:      l.type,
+      startDate: l.startDate.toISOString(),
+      endDate:   l.endDate.toISOString(),
+    }));
+  },
+  ["approved-leaves"],
+  { revalidate: TTL, tags: ["leaves"] }
+);
+export const getCachedApprovedLeaves = (from: string, to: string) =>
+  _getApprovedLeaves(from, to);

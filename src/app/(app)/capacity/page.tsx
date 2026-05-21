@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { getNextNWeeks, getWeekLabel, getMondayOf } from "@/lib/weeks";
+import { getCachedSimpleUsers, getCachedAllocationsMinimal, getCachedApprovedLeaves } from "@/lib/queries";
 
 export default async function CapacityPage() {
   await auth();
@@ -8,11 +8,18 @@ export default async function CapacityPage() {
   const weekEnd = new Date(weeks[weeks.length - 1]);
   weekEnd.setDate(weekEnd.getDate() + 7);
 
-  const [users, allocations, leaves] = await Promise.all([
-    prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, capacity: true }, orderBy: { name: "asc" } }),
-    prisma.allocation.findMany({ where: { startDate: { lt: weekEnd }, endDate: { gte: weeks[0] } }, select: { userId: true, startDate: true, endDate: true, hoursPerDay: true } }),
-    prisma.leave.findMany({ where: { status: "APPROVED", startDate: { lt: weekEnd }, endDate: { gte: weeks[0] } }, select: { userId: true, startDate: true, endDate: true, type: true } }),
+  const fromISO = weeks[0].toISOString();
+  const toISO   = weekEnd.toISOString();
+
+  const [users, rawAllocations, rawLeaves] = await Promise.all([
+    getCachedSimpleUsers(),
+    getCachedAllocationsMinimal(fromISO, toISO),
+    getCachedApprovedLeaves(fromISO, toISO),
   ]);
+
+  // Convert ISO strings back to Date objects for server-side calculations
+  const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
+  const leaves      = rawLeaves.map((l) => ({ ...l, startDate: new Date(l.startDate), endDate: new Date(l.endDate) }));
 
   function workDaysInWeek(wMon: Date, aStart: Date, aEnd: Date): number {
     const wFri = new Date(wMon); wFri.setDate(wMon.getDate() + 4);

@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { getNextNWeeks, getWeekLabel, getMondayOf } from "@/lib/weeks";
+import { getCachedSimpleUsers, getCachedAllocationsMinimal } from "@/lib/queries";
 
 export default async function ForecastPage() {
   await auth();
@@ -8,13 +8,13 @@ export default async function ForecastPage() {
   const weekEnd = new Date(weeks90[weeks90.length - 1]);
   weekEnd.setDate(weekEnd.getDate() + 7);
 
-  const [users, allocations] = await Promise.all([
-    prisma.user.findMany({ where: { isActive: true }, select: { id: true, capacity: true } }),
-    prisma.allocation.findMany({
-      where: { startDate: { lt: weekEnd }, endDate: { gte: weeks90[0] } },
-      select: { startDate: true, endDate: true, hoursPerDay: true },
-    }),
+  const [users, rawAllocations] = await Promise.all([
+    getCachedSimpleUsers(),
+    getCachedAllocationsMinimal(weeks90[0].toISOString(), weekEnd.toISOString()),
   ]);
+
+  // Convert ISO strings back to Date objects for server-side calculations
+  const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
 
   const totalCapacityPerWeek = users.reduce((s, u) => s + u.capacity, 0);
 

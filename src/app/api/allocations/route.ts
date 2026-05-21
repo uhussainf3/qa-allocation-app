@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ok, err, unauthorized } from "@/lib/apiResponse";
 import { getMondayOf } from "@/lib/weeks";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 const createSchema = z.object({
@@ -81,5 +82,6 @@ export async function POST(req: Request) {
     },
   });
 
+  revalidateTag("allocations", "max");
   return ok(allocation, 201);
 }

@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { getMondayOf, addWeeks } from "@/lib/weeks";
+import { getCachedSimpleUsers, getCachedAllocationsMinimal } from "@/lib/queries";
 import { BenchClient } from "./BenchClient";
 
 interface PageProps {
@@ -23,17 +23,13 @@ export default async function BenchPage({ searchParams }: PageProps) {
   // Fetch all allocation weeks in the range
   const rangeEnd = addWeeks(safeToDate, 1); // exclusive upper bound
 
-  const [users, allocations] = await Promise.all([
-    prisma.user.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true, email: true, capacity: true, role: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.allocation.findMany({
-      where: { startDate: { lt: rangeEnd }, endDate: { gte: fromDate } },
-      select: { userId: true, hoursPerDay: true, startDate: true, endDate: true },
-    }),
+  const [users, rawAllocations] = await Promise.all([
+    getCachedSimpleUsers(),
+    getCachedAllocationsMinimal(fromDate.toISOString(), rangeEnd.toISOString()),
   ]);
+
+  // Convert ISO strings back to Date objects for server-side calculations
+  const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
 
   // Count working days per allocation that overlap the selected range
   function workingDaysOverlap(aStart: Date, aEnd: Date, rStart: Date, rEnd: Date): number {
