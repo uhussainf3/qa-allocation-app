@@ -1,0 +1,9 @@
+export type Role = "ADMIN" | "PROJECT_MANAGER" | "MANAGEMENT" | "QA_ENGINEER";
+export type ProjectStatus = "ACTIVE" | "ON_HOLD" | "COMPLETED" | "CANCELLED";
+export type HoursLogStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
+export type TimesheetStatus = "PENDING" | "SUBMITTED" | "APPROVED" | "REJECTED" | "FLAGGED";
+export type LeaveType = "PTO" | "SICK" | "TRAINING" | "PUBLIC_HOLIDAY" | "UNPAID";
+export type LeaveStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type RequestPriority = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+export type RequestStatus = "PENDING" | "APPROVED" | "DECLINED" | "FULFILLED";
+export type NotificationType = "OVER_ALLOCATION" | "LEAVE_REQUEST" | "TIMESHEET_SUBMITTED" | "TIMESHEET_APPROVED" | "TIMESHEET_REJECTED" | "RESOURCE_REQUEST" | "PROJECT_UPDATE" | "SYSTEM";

@@ -1,0 +1,274 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// NextAuth required models
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// User — role is one of: ADMIN | PROJECT_MANAGER | MANAGEMENT | QA_ENGINEER
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  role          String    @default("QA_ENGINEER")
+  isActive      Boolean   @default(true)
+  capacity      Int       @default(40)
+  department    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts                 Account[]
+  sessions                 Session[]
+  allocations              Allocation[]
+  hoursLogs                HoursLog[]
+  leaveRequests            Leave[]
+  skills                   UserSkill[]
+  auditLogs                AuditLog[]
+  notifications            Notification[]
+  resourceRequestsCreated  ResourceRequest[] @relation("RequestCreatedBy")
+  resourceRequestsAssigned ResourceRequest[] @relation("RequestAssignedTo")
+  timesheets               Timesheet[]
+}
+
+// Project — status: ACTIVE | ON_HOLD | COMPLETED | CANCELLED
+
+model Project {
+  id              String   @id @default(cuid())
+  name            String
+  code            String   @unique
+  description     String?
+  clientName      String?
+  status          String   @default("ACTIVE")
+  sanctionedHours Float    @default(0)
+  startDate       DateTime?
+  endDate         DateTime?
+  color           String   @default("#6366f1")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tasks            Task[]
+  allocations      Allocation[]
+  hoursLogs        HoursLog[]
+  resourceRequests ResourceRequest[]
+  auditLogs        AuditLog[]
+}
+
+model Task {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  projectId      String
+  parentId       String?
+  estimatedHours Float    @default(0)
+  order          Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent      Task?        @relation("SubTasks", fields: [parentId], references: [id])
+  subtasks    Task[]       @relation("SubTasks")
+  allocations Allocation[]
+  hoursLogs   HoursLog[]
+}
+
+model Allocation {
+  id           String   @id @default(cuid())
+  userId       String
+  projectId    String
+  taskId       String?
+  startDate    DateTime
+  endDate      DateTime
+  hoursPerDay  Float    @default(8)
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    Task?   @relation(fields: [taskId], references: [id])
+
+  @@unique([userId, projectId, startDate])
+}
+
+// HoursLog — status: DRAFT | SUBMITTED | APPROVED | REJECTED
+
+model HoursLog {
+  id          String   @id @default(cuid())
+  userId      String
+  projectId   String
+  taskId      String?
+  date        DateTime
+  hours       Float
+  notes       String?
+  status      String   @default("DRAFT")
+  timesheetId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task      Task?      @relation(fields: [taskId], references: [id])
+  timesheet Timesheet? @relation(fields: [timesheetId], references: [id])
+}
+
+// Timesheet — status: PENDING | SUBMITTED | APPROVED | REJECTED | FLAGGED
+
+model Timesheet {
+  id          String    @id @default(cuid())
+  userId      String
+  weekStart   DateTime
+  totalHours  Float     @default(0)
+  status      String    @default("PENDING")
+  reviewNote  String?
+  reviewedAt  DateTime?
+  reviewedBy  String?
+  submittedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hoursLogs HoursLog[]
+
+  @@unique([userId, weekStart])
+}
+
+// Leave — type: PTO | SICK | TRAINING | PUBLIC_HOLIDAY | UNPAID
+//         status: PENDING | APPROVED | REJECTED
+
+model Leave {
+  id         String   @id @default(cuid())
+  userId     String
+  type       String
+  startDate  DateTime
+  endDate    DateTime
+  reason     String?
+  status     String   @default("PENDING")
+  approvedBy String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Skill {
+  id       String      @id @default(cuid())
+  name     String      @unique
+  category String?
+  users    UserSkill[]
+}
+
+model UserSkill {
+  id      String @id @default(cuid())
+  userId  String
+  skillId String
+  level   Int    @default(1)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, skillId])
+}
+
+// ResourceRequest — priority: CRITICAL | HIGH | MEDIUM | LOW
+//                   status: PENDING | APPROVED | DECLINED | FULFILLED
+
+model ResourceRequest {
+  id             String    @id @default(cuid())
+  projectId      String?
+  requestedById  String
+  assignedToId   String?
+  title          String
+  description    String?
+  skillsRequired String?
+  hoursPerWeek   Float     @default(0)
+  startDate      DateTime?
+  duration       Int?
+  priority       String    @default("MEDIUM")
+  status         String    @default("PENDING")
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  project     Project? @relation(fields: [projectId], references: [id])
+  requestedBy User     @relation("RequestCreatedBy", fields: [requestedById], references: [id])
+  assignedTo  User?    @relation("RequestAssignedTo", fields: [assignedToId], references: [id])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  targetType String
+  targetId   String?
+  projectId  String?
+  details    String?
+  createdAt  DateTime @default(now())
+
+  actor   User?    @relation(fields: [actorId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id])
+}
+
+// Notification — type: OVER_ALLOCATION | LEAVE_REQUEST | TIMESHEET_SUBMITTED |
+//                      TIMESHEET_APPROVED | TIMESHEET_REJECTED | RESOURCE_REQUEST |
+//                      PROJECT_UPDATE | SYSTEM
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model NotificationPreference {
+  id     String @id @default(cuid())
+  userId String @unique
+  prefs  String
+}
