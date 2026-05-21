@@ -5,11 +5,13 @@ import type { Role } from "@/types/enums";
 
 type Subtask = { id: string; name: string; estimatedHours: number };
 type Task = { id: string; name: string; estimatedHours: number; subtasks: Subtask[] };
+type EngineerBreakdown = { userId: string; userName: string | null; hoursToDate: number; totalAllocated: number };
 type Project = {
   id: string; name: string; code: string; description: string | null;
   clientName: string | null; status: string; sanctionedHours: number;
   startDate: string | null; endDate: string | null; color: string;
-  consumedHours: number; allocatedHours: number; tasks: Task[];
+  consumedHours: number; allocatedHours: number; hoursToDate: number;
+  engineerBreakdown: EngineerBreakdown[]; tasks: Task[];
   _count: { allocations: number; hoursLogs: number };
 };
 
@@ -26,8 +28,14 @@ export function ProjectsClient({ projects, currentUserRole }: Props) {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: "", code: "", clientName: "", sanctionedHours: 0, color: COLORS[0], status: "ACTIVE", startDate: "", endDate: "", description: "" });
   const [saving, setSaving] = useState(false);
+  const [showBreakdown, setShowBreakdown] = useState(false);
 
   const canEdit = currentUserRole === "ADMIN" || currentUserRole === "PROJECT_MANAGER";
+
+  function selectProject(p: Project) {
+    setSelected(p);
+    setShowBreakdown(false);
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -49,9 +57,10 @@ export function ProjectsClient({ projects, currentUserRole }: Props) {
   }
 
   const proj = selected;
-  const remaining = proj ? proj.sanctionedHours - proj.consumedHours : 0;
-  const usedPct = proj && proj.sanctionedHours > 0 ? Math.round((proj.consumedHours / proj.sanctionedHours) * 100) : 0;
-  const allocPct = proj && proj.sanctionedHours > 0 ? Math.round((proj.allocatedHours / proj.sanctionedHours) * 100) : 0;
+  const remaining   = proj ? proj.sanctionedHours - proj.consumedHours : 0;
+  const usedPct     = proj && proj.sanctionedHours > 0 ? Math.round((proj.consumedHours  / proj.sanctionedHours) * 100) : 0;
+  const allocPct    = proj && proj.sanctionedHours > 0 ? Math.round((proj.allocatedHours / proj.sanctionedHours) * 100) : 0;
+  const toDatePct   = proj && proj.sanctionedHours > 0 ? Math.round((proj.hoursToDate    / proj.sanctionedHours) * 100) : 0;
 
   return (
     <div className="page" data-screen-label="Projects">
@@ -71,7 +80,7 @@ export function ProjectsClient({ projects, currentUserRole }: Props) {
           {projects.map((p) => (
             <div
               key={p.id}
-              onClick={() => setSelected(p)}
+              onClick={() => selectProject(p)}
               style={{
                 display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
                 cursor: "pointer", borderRadius: 6,
@@ -128,7 +137,47 @@ export function ProjectsClient({ projects, currentUserRole }: Props) {
                 <div className="kpi-value">{proj.allocatedHours}<span className="unit">h</span></div>
                 <div className="kpi-meta"><span className="chip">{allocPct}%</span> of sanctioned · {proj._count.allocations} allocation{proj._count.allocations !== 1 ? "s" : ""}</div>
               </div>
+              <div
+                className="kpi"
+                style={{ cursor: proj.engineerBreakdown.length > 0 ? "pointer" : "default", userSelect: "none" }}
+                onClick={() => proj.engineerBreakdown.length > 0 && setShowBreakdown((v) => !v)}
+                title={proj.engineerBreakdown.length > 0 ? "Click to see per-engineer breakdown" : undefined}
+              >
+                <div className="kpi-label">Hours to Date</div>
+                <div className="kpi-value">{proj.hoursToDate}<span className="unit">h</span></div>
+                {proj.engineerBreakdown.length > 0 && (
+                  <div className="kpi-meta">
+                    {proj.sanctionedHours > 0 && <><span className="chip">{toDatePct}%</span>{" "}</>}
+                    {showBreakdown ? "▲ hide" : "▼ by engineer"}
+                  </div>
+                )}
+              </div>
             </div>
+
+            {/* Per-engineer breakdown */}
+            {showBreakdown && proj.engineerBreakdown.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Engineer Breakdown</div>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                      <th style={{ textAlign: "left",  padding: "6px 8px", fontWeight: 500, color: "var(--text-muted)" }}>Engineer</th>
+                      <th style={{ textAlign: "right", padding: "6px 8px", fontWeight: 500, color: "var(--text-muted)" }}>To Date</th>
+                      <th style={{ textAlign: "right", padding: "6px 8px", fontWeight: 500, color: "var(--text-muted)" }}>Total Allocated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {proj.engineerBreakdown.map((e) => (
+                      <tr key={e.userId} style={{ borderBottom: "1px solid var(--border-faint)" }}>
+                        <td style={{ padding: "7px 8px" }}>{e.userName ?? "Unknown"}</td>
+                        <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "var(--mono)" }}>{e.hoursToDate}h</td>
+                        <td style={{ padding: "7px 8px", textAlign: "right", fontFamily: "var(--mono)" }}>{e.totalAllocated}h</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             {/* Tasks */}
             <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Tasks</div>

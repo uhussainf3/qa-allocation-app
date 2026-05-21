@@ -207,23 +207,32 @@ export const getCachedConflictAllocations = (from: string, to: string) =>
   _getConflictAllocations(from, to);
 
 /**
- * All allocations (minimal) for the Projects page allocated-hours calc.
- * No date range filter — needs all time. Dates as ISO strings.
+ * All allocations for the Projects page — includes userId + userName for
+ * the per-engineer "hours to date" breakdown tile.
  */
 export const getCachedAllAllocationsForProjects = unstable_cache(
   async () => {
     const rows = await prisma.allocation.findMany({
-      select: { projectId: true, startDate: true, endDate: true, hoursPerDay: true },
+      select: {
+        projectId:   true,
+        startDate:   true,
+        endDate:     true,
+        hoursPerDay: true,
+        userId:      true,
+        user:        { select: { name: true } },
+      },
     });
     return rows.map((a) => ({
       projectId:   a.projectId,
       hoursPerDay: a.hoursPerDay,
       startDate:   a.startDate.toISOString(),
       endDate:     a.endDate.toISOString(),
+      userId:      a.userId,
+      userName:    a.user.name,
     }));
   },
   ["allocations-for-projects"],
-  { revalidate: TTL, tags: ["allocations"] }
+  { revalidate: TTL, tags: ["allocations", "users"] }
 );
 
 // ─── Leaves ───────────────────────────────────────────────────────────────────
