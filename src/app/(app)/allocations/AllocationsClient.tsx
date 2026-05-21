@@ -1,10 +1,71 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { getNextNWeeks, getWeekLabel, getWeekRange } from "@/lib/weeks";
 import type { Role } from "@/types/enums";
 
-// Snap any date string to its Monday, return YYYY-MM-DD
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type User       = { id: string; name: string | null; email: string | null; image: string | null; capacity: number; role: Role };
+type Project    = { id: string; name: string; code: string; color: string };
+type Task       = { id: string; name: string } | null;
+type Allocation = {
+  id: string; userId: string; projectId: string; taskId: string | null;
+  startDate: string; endDate: string; hoursPerDay: number; notes: string | null;
+  project: Project; task: Task;
+};
+type WeekMeta   = { date: string; label: string; range: string; isCurrent: boolean };
+type CellEntry  = { hours: number; id: string | null; hoursPerDay: number; startDate: string; endDate: string };
+type EditState  = {
+  allocationId: string | null; userId: string; projectId: string;
+  startDate: string; endDate: string; hoursPerDay: number;
+  projName: string; engineerName: string;
+};
+type ViewData   = { users: User[]; allocations: Allocation[]; projects: Project[] };
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const WEEK_OPTIONS = [
+  { value: 4,  label: "4 weeks"  },
+  { value: 8,  label: "8 weeks"  },
+  { value: 13, label: "3 months" },
+  { value: 26, label: "6 months" },
+];
+
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function cacheKey(nWeeks: number) { return `alloc-view-${nWeeks}`; }
+
+function readCache(nWeeks: number): ViewData | null {
+  try {
+    const raw = sessionStorage.getItem(cacheKey(nWeeks));
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw) as { ts: number; data: ViewData };
+    if (Date.now() - ts > CACHE_TTL_MS) return null;
+    return data;
+  } catch { return null; }
+}
+
+function writeCache(nWeeks: number, data: ViewData) {
+  try { sessionStorage.setItem(cacheKey(nWeeks), JSON.stringify({ ts: Date.now(), data })); } catch { /* ignore */ }
+}
+
+function clearCache(nWeeks: number) {
+  try { sessionStorage.removeItem(cacheKey(nWeeks)); } catch { /* ignore */ }
+}
+
+function buildWeeks(n: number): WeekMeta[] {
+  return getNextNWeeks(n).map((w, i) => ({
+    date:      w.toISOString(),
+    label:     getWeekLabel(w),
+    range:     getWeekRange(w),
+    isCurrent: i === 0,
+  }));
+}
+
 function toMonday(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
   const day = d.getDay();
@@ -13,43 +74,9 @@ function toMonday(dateStr: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-// Format a YYYY-MM-DD as "12 May - 16 May"
-function fmtWeek(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  const fri = new Date(d);
-  fri.setDate(fri.getDate() + 4);
-  const fmt = (x: Date) => x.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-  return `${fmt(d)} - ${fmt(fri)}`;
-}
-
-const WEEK_OPTIONS = [
-  { value: 4,  label: "4 weeks" },
-  { value: 8,  label: "8 weeks" },
-  { value: 13, label: "3 months" },
-  { value: 26, label: "6 months" },
-];
-
-type User = { id: string; name: string | null; email: string | null; image: string | null; capacity: number; role: Role };
-type Project = { id: string; name: string; code: string; color: string };
-type Task = { id: string; name: string } | null;
-type Allocation = {
-  id: string; userId: string; projectId: string; taskId: string | null;
-  startDate: string; endDate: string; hoursPerDay: number; notes: string | null;
-  project: Project; task: Task;
-};
-type WeekMeta = { date: string; label: string; range: string; isCurrent: boolean };
-// hours in this cell = hoursPerDay * working days that overlap this week
-type CellEntry = { hours: number; id: string | null; hoursPerDay: number; startDate: string; endDate: string };
-type EditState = {
-  allocationId: string | null; userId: string; projectId: string;
-  startDate: string; endDate: string; hoursPerDay: number;
-  projName: string; engineerName: string;
-};
-
-/** Count Mon-Fri days that overlap between [allocStart,allocEnd] and [weekMon, weekMon+4] */
 function workingDaysInWeek(weekMonISO: string, allocStart: string, allocEnd: string): number {
-  const wMon = new Date(weekMonISO + "T00:00:00");
-  const wFri = new Date(wMon); wFri.setDate(wMon.getDate() + 4);
+  const wMon   = new Date(weekMonISO + "T00:00:00");
+  const wFri   = new Date(wMon); wFri.setDate(wMon.getDate() + 4);
   const aStart = new Date(allocStart + "T00:00:00");
   const aEnd   = new Date(allocEnd   + "T00:00:00");
   const oStart = aStart > wMon ? aStart : wMon;
@@ -65,15 +92,6 @@ function workingDaysInWeek(weekMonISO: string, allocStart: string, allocEnd: str
   return days;
 }
 
-interface Props {
-  users: User[];
-  allocations: Allocation[];
-  projects: Project[];
-  weeks: WeekMeta[];
-  allWeeks: WeekMeta[];
-  currentUserRole: Role;
-}
-
 function statusForPct(pct: number) {
   if (pct === 0) return "idle";
   if (pct > 100) return "bad";
@@ -81,8 +99,10 @@ function statusForPct(pct: number) {
   return "ok";
 }
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
 function AllocCell({ hours, capacity, unit }: { hours: number; capacity: number; unit: string }) {
-  const pct = Math.round((hours / capacity) * 100);
+  const pct    = Math.round((hours / capacity) * 100);
   const status = statusForPct(pct);
   return (
     <div className={`alloc-cell ${status}`} style={{ width: "100%" }}>
@@ -95,33 +115,98 @@ function AllocCell({ hours, capacity, unit }: { hours: number; capacity: number;
   );
 }
 
-export function AllocationsClient({ users, allocations, projects, weeks, allWeeks, currentUserRole }: Props) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const activeWeeks = Number(searchParams.get("weeks") ?? 4);
+function InlineSkeleton() {
+  return (
+    <div style={{ padding: "32px 0", display: "flex", flexDirection: "column", gap: 12 }}>
+      {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+        <div key={i} style={{
+          height: 52, borderRadius: 8,
+          background: "linear-gradient(90deg, var(--surface-2) 25%, var(--border) 50%, var(--surface-2) 75%)",
+          backgroundSize: "200% 100%",
+          animation: "shimmer 1.4s infinite",
+          opacity: 1 - i * 0.06,
+        }} />
+      ))}
+    </div>
+  );
+}
 
-  const [unit, setUnit] = useState<"hrs" | "pct">("hrs");
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [showNewModal, setShowNewModal] = useState(false);
+// ─── Main component ───────────────────────────────────────────────────────────
+
+interface Props { currentUserRole: Role; }
+
+export function AllocationsClient({ currentUserRole }: Props) {
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+  const activeWeeks  = Number(searchParams.get("weeks") ?? 4);
+
+  // Weeks metadata — pure computation, no network
+  const weeks    = useMemo(() => buildWeeks(activeWeeks), [activeWeeks]);
+  const allWeeks = useMemo(() => buildWeeks(26),          []);
+
+  // Data state
+  const [users,       setUsers]       = useState<User[]>([]);
+  const [allocations, setAllocations] = useState<Allocation[]>([]);
+  const [projects,    setProjects]    = useState<Project[]>([]);
+  const [loading,     setLoading]     = useState(true);
+
+  // UI state
+  const [unit,          setUnit]          = useState<"hrs" | "pct">("hrs");
+  const [expanded,      setExpanded]      = useState<Record<string, boolean>>({});
+  const [showNewModal,  setShowNewModal]  = useState(false);
+  const [editState,     setEditState]     = useState<EditState | null>(null);
+  const [editHours,     setEditHours]     = useState(0);
+  const [editSaving,    setEditSaving]    = useState(false);
+  const [saving,        setSaving]        = useState(false);
+
   const todayStr = new Date().toISOString().slice(0, 10);
   const [newAlloc, setNewAlloc] = useState({
-    userId:      "",
-    projectId:   "",
-    startDate:   todayStr,
-    endDate:     todayStr,
-    hoursPerDay: 8,
+    userId: "", projectId: "", startDate: todayStr, endDate: todayStr, hoursPerDay: 8,
   });
-  const [saving, setSaving] = useState(false);
-  const [editState, setEditState] = useState<EditState | null>(null);
-  const [editHours, setEditHours] = useState(0);
-  const [editSaving, setEditSaving] = useState(false);
 
   const canEdit = currentUserRole === "ADMIN" || currentUserRole === "PROJECT_MANAGER";
 
+  // ── Fetch + cache ────────────────────────────────────────────────────────────
+  const fetchData = useCallback(async (nWeeks: number, background = false) => {
+    if (!background) setLoading(true);
+    try {
+      const res  = await fetch(`/api/allocations/view?weeks=${nWeeks}`);
+      if (!res.ok) throw new Error("Failed");
+      const data: ViewData = await res.json();
+      setUsers(data.users);
+      setAllocations(data.allocations);
+      setProjects(data.projects);
+      writeCache(nWeeks, data);
+    } catch {
+      // keep whatever is in state already
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const cached = readCache(activeWeeks);
+    if (cached) {
+      // Show instantly from cache, then revalidate silently in background
+      setUsers(cached.users);
+      setAllocations(cached.allocations);
+      setProjects(cached.projects);
+      setLoading(false);
+      fetchData(activeWeeks, true); // background refresh
+    } else {
+      fetchData(activeWeeks, false);
+    }
+  }, [activeWeeks, fetchData]);
+
+  // ── Refresh helper (after mutations) ────────────────────────────────────────
+  const refresh = useCallback(async () => {
+    clearCache(activeWeeks);
+    await fetchData(activeWeeks, false);
+  }, [activeWeeks, fetchData]);
+
+  // ── Grid logic ───────────────────────────────────────────────────────────────
   const toggle = (id: string) => setExpanded((s) => ({ ...s, [id]: !s[id] }));
 
-  // Group allocations by userId -> key (projectId__taskId) -> weekIndex
-  // Hours per cell = hoursPerDay * working days overlapping that week
   const allocMap = useMemo(() => {
     const m: Record<string, Record<string, CellEntry[]>> = {};
     users.forEach((u) => { m[u.id] = {}; });
@@ -135,13 +220,12 @@ export function AllocationsClient({ users, allocations, projects, weeks, allWeek
         const days = workingDaysInWeek(w.date.slice(0, 10), a.startDate.slice(0, 10), a.endDate.slice(0, 10));
         if (days > 0) {
           const prev = m[a.userId][key][wIdx];
-          // If multiple allocations hit same cell, sum hours; keep last id for editing
           m[a.userId][key][wIdx] = {
-            hours: prev.hours + Math.round(days * a.hoursPerDay * 10) / 10,
-            id: a.id,
+            hours:       prev.hours + Math.round(days * a.hoursPerDay * 10) / 10,
+            id:          a.id,
             hoursPerDay: a.hoursPerDay,
-            startDate: a.startDate.slice(0, 10),
-            endDate: a.endDate.slice(0, 10),
+            startDate:   a.startDate.slice(0, 10),
+            endDate:     a.endDate.slice(0, 10),
           };
         }
       });
@@ -149,21 +233,33 @@ export function AllocationsClient({ users, allocations, projects, weeks, allWeek
     return m;
   }, [allocations, users, weeks]);
 
-  const userWeekHours = (userId: string, wIdx: number) => {
-    return Object.values(allocMap[userId] ?? {}).reduce((s, arr) => s + (arr[wIdx]?.hours ?? 0), 0);
-  };
+  const userWeekHours  = (userId: string, wIdx: number) =>
+    Object.values(allocMap[userId] ?? {}).reduce((s, arr) => s + (arr[wIdx]?.hours ?? 0), 0);
+  const userTotalHours = (userId: string) =>
+    weeks.reduce((s, _, i) => s + userWeekHours(userId, i), 0);
+  const weekTotals     = weeks.map((_, i) => {
+    const h   = users.reduce((s, u) => s + userWeekHours(u.id, i), 0);
+    const cap = users.reduce((s, u) => s + u.capacity, 0);
+    return { h, cap, pct: cap > 0 ? Math.round((h / cap) * 100) : 0 };
+  });
+  const grandH    = weekTotals.reduce((s, t) => s + t.h, 0);
+  const grandCap  = users.reduce((s, u) => s + u.capacity * weeks.length, 0);
+  const grandPct  = grandCap > 0 ? Math.round((grandH / grandCap) * 100) : 0;
+  const overCount = users.reduce((s, u) =>
+    s + weeks.reduce((x, _, i) => x + (userWeekHours(u.id, i) > u.capacity ? 1 : 0), 0), 0);
 
+  const initials = (name: string | null, email: string | null) =>
+    (name ?? email ?? "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+
+  // ── Edit handlers ─────────────────────────────────────────────────────────────
   function openEdit(entry: CellEntry, userId: string, projectId: string, projName: string, engineerName: string) {
     if (!canEdit) return;
     setEditState({
-      allocationId: entry.id,
-      userId,
-      projectId,
-      startDate: entry.startDate || toMonday(new Date().toISOString().slice(0, 10)),
-      endDate:   entry.endDate   || toMonday(new Date().toISOString().slice(0, 10)),
+      allocationId: entry.id, userId, projectId,
+      startDate:   entry.startDate || toMonday(new Date().toISOString().slice(0, 10)),
+      endDate:     entry.endDate   || toMonday(new Date().toISOString().slice(0, 10)),
       hoursPerDay: entry.hoursPerDay || 8,
-      projName,
-      engineerName,
+      projName, engineerName,
     });
     setEditHours(entry.hoursPerDay || 8);
   }
@@ -174,32 +270,18 @@ export function AllocationsClient({ users, allocations, projects, weeks, allWeek
     try {
       if (editState.allocationId) {
         await fetch(`/api/allocations/${editState.allocationId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            startDate:   editState.startDate,
-            endDate:     editState.endDate,
-            hoursPerDay: editHours,
-          }),
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ startDate: editState.startDate, endDate: editState.endDate, hoursPerDay: editHours }),
         });
       } else {
         await fetch("/api/allocations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId:      editState.userId,
-            projectId:   editState.projectId,
-            startDate:   editState.startDate,
-            endDate:     editState.endDate,
-            hoursPerDay: editHours,
-          }),
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: editState.userId, projectId: editState.projectId, startDate: editState.startDate, endDate: editState.endDate, hoursPerDay: editHours }),
         });
       }
       setEditState(null);
-      window.location.reload();
-    } finally {
-      setEditSaving(false);
-    }
+      await refresh();
+    } finally { setEditSaving(false); }
   }
 
   async function handleEditDelete() {
@@ -209,59 +291,31 @@ export function AllocationsClient({ users, allocations, projects, weeks, allWeek
     try {
       await fetch(`/api/allocations/${editState.allocationId}`, { method: "DELETE" });
       setEditState(null);
-      window.location.reload();
-    } finally {
-      setEditSaving(false);
-    }
+      await refresh();
+    } finally { setEditSaving(false); }
   }
-
-  const userTotalHours = (userId: string) =>
-    weeks.reduce((s, _, i) => s + userWeekHours(userId, i), 0);
-
-  const weekTotals = weeks.map((_, i) => {
-    const h = users.reduce((s, u) => s + userWeekHours(u.id, i), 0);
-    const cap = users.reduce((s, u) => s + u.capacity, 0);
-    return { h, cap, pct: cap > 0 ? Math.round((h / cap) * 100) : 0 };
-  });
-
-  const grandH = weekTotals.reduce((s, t) => s + t.h, 0);
-  const grandCap = users.reduce((s, u) => s + u.capacity * weeks.length, 0);
-  const grandPct = grandCap > 0 ? Math.round((grandH / grandCap) * 100) : 0;
-  const overCount = users.reduce((s, u) =>
-    s + weeks.reduce((x, _, i) => x + (userWeekHours(u.id, i) > u.capacity ? 1 : 0), 0), 0);
-
-  const initials = (name: string | null, email: string | null) =>
-    (name ?? email ?? "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
       await fetch("/api/allocations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId:      newAlloc.userId,
-          projectId:   newAlloc.projectId,
-          startDate:   newAlloc.startDate,
-          endDate:     newAlloc.endDate,
-          hoursPerDay: newAlloc.hoursPerDay,
-        }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: newAlloc.userId, projectId: newAlloc.projectId, startDate: newAlloc.startDate, endDate: newAlloc.endDate, hoursPerDay: newAlloc.hoursPerDay }),
       });
       setShowNewModal(false);
-      window.location.reload();
-    } finally {
-      setSaving(false);
-    }
+      await refresh();
+    } finally { setSaving(false); }
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div className="page" data-screen-label="Allocations">
       <div className="page-head">
         <div>
           <h1 className="page-title">Allocations</h1>
           <div className="page-sub">
-            {users.length} engineers · {WEEK_OPTIONS.find((o) => o.value === activeWeeks)?.label ?? `${activeWeeks} weeks`}
+            {loading ? "Loading…" : `${users.length} engineers · ${WEEK_OPTIONS.find((o) => o.value === activeWeeks)?.label ?? `${activeWeeks} weeks`}`}
           </div>
         </div>
         <div className="page-actions">
@@ -269,19 +323,11 @@ export function AllocationsClient({ users, allocations, projects, weeks, allWeek
             <button className={unit === "hrs" ? "active" : ""} onClick={() => setUnit("hrs")}>Hours</button>
             <button className={unit === "pct" ? "active" : ""} onClick={() => setUnit("pct")}>%</button>
           </div>
-          <select
-            className="select-sm"
-            value={activeWeeks}
-            onChange={(e) => router.push(`?weeks=${e.target.value}`)}
-          >
-            {WEEK_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
+          <select className="select-sm" value={activeWeeks} onChange={(e) => router.push(`?weeks=${e.target.value}`)}>
+            {WEEK_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           {canEdit && (
-            <button className="btn primary" onClick={() => setShowNewModal(true)}>
-              + New allocation
-            </button>
+            <button className="btn primary" onClick={() => setShowNewModal(true)}>+ New allocation</button>
           )}
         </div>
       </div>
@@ -310,118 +356,124 @@ export function AllocationsClient({ users, allocations, projects, weeks, allWeek
         </div>
       </div>
 
-      <div className="grid-wrap">
-        <div className="alloc-grid" style={{ gridTemplateColumns: `260px repeat(${weeks.length}, minmax(120px, 1fr)) 120px` }}>
-          {/* Header */}
-          <div className="ag-cell ag-head">Engineer</div>
-          {weeks.map((w) => (
-            <div key={w.date} className="ag-cell ag-head">
-              <div className="week-head">
-                <span>{w.label}{w.isCurrent ? " · current" : ""}</span>
-                <span className="wk-range">{w.range}</span>
-              </div>
-            </div>
-          ))}
-          <div className="ag-cell ag-head" style={{ justifyContent: "flex-end" }}>{weeks.length}-wk total</div>
+      {/* Grid or inline skeleton */}
+      {loading && users.length === 0 ? (
+        <div className="card"><InlineSkeleton /></div>
+      ) : (
+        <>
+          <div className="grid-wrap">
+            <div className="alloc-grid" style={{ gridTemplateColumns: `260px repeat(${weeks.length}, minmax(120px, 1fr)) 120px` }}>
+              {/* Header */}
+              <div className="ag-cell ag-head">Engineer</div>
+              {weeks.map((w) => (
+                <div key={w.date} className="ag-cell ag-head">
+                  <div className="week-head">
+                    <span>{w.label}{w.isCurrent ? " · current" : ""}</span>
+                    <span className="wk-range">{w.range}</span>
+                  </div>
+                </div>
+              ))}
+              <div className="ag-cell ag-head" style={{ justifyContent: "flex-end" }}>{weeks.length}-wk total</div>
 
-          {/* Engineer rows */}
-          {users.map((u) => {
-            const open = expanded[u.id];
-            const totalH = userTotalHours(u.id);
-            const totalCap = u.capacity * weeks.length;
-            const totalPct = totalCap > 0 ? Math.round((totalH / totalCap) * 100) : 0;
-            const lines = Object.entries(allocMap[u.id] ?? {});
+              {/* Engineer rows */}
+              {users.map((u) => {
+                const open     = expanded[u.id];
+                const totalH   = userTotalHours(u.id);
+                const totalCap = u.capacity * weeks.length;
+                const totalPct = totalCap > 0 ? Math.round((totalH / totalCap) * 100) : 0;
+                const lines    = Object.entries(allocMap[u.id] ?? {});
+                return (
+                  <>
+                    <div key={`person-${u.id}`} className="ag-cell ag-row-person" onClick={() => toggle(u.id)} style={{ gap: 6, cursor: "pointer" }}>
+                      <span className={`caret ${open ? "open" : ""}`}>›</span>
+                      <div className="person">
+                        <span className="avatar">{initials(u.name, u.email)}</span>
+                        <div>
+                          <div className="person-name">{u.name}</div>
+                          <div className="person-role">{u.role.replace("_", " ")} · {u.capacity}h/wk</div>
+                        </div>
+                      </div>
+                    </div>
+                    {weeks.map((w, wIdx) => (
+                      <div key={`${u.id}-w${wIdx}`} className="ag-cell ag-row-person" style={{ padding: 0 }}>
+                        <AllocCell hours={userWeekHours(u.id, wIdx)} capacity={u.capacity} unit={unit} />
+                      </div>
+                    ))}
+                    <div key={`total-${u.id}`} className="ag-cell ag-row-person" style={{ padding: 0 }}>
+                      <div className={`total-cell ${totalPct > 100 ? "bad" : ""}`}>
+                        <span className="t-h">{totalH}h</span>
+                        <span className="t-p">{totalPct}% · cap {totalCap}h</span>
+                      </div>
+                    </div>
 
-            return (
-              <>
-                <div key={`person-${u.id}`} className="ag-cell ag-row-person" onClick={() => toggle(u.id)} style={{ gap: 6, cursor: "pointer" }}>
-                  <span className={`caret ${open ? "open" : ""}`}>›</span>
-                  <div className="person">
-                    <span className="avatar">{initials(u.name, u.email)}</span>
-                    <div>
-                      <div className="person-name">{u.name}</div>
-                      <div className="person-role">{u.role.replace("_", " ")} · {u.capacity}h/wk</div>
+                    {open && lines.map(([key, entries]) => {
+                      const [projectId] = key.split("__");
+                      const proj = projects.find((p) => p.id === projectId);
+                      if (!proj) return null;
+                      return (
+                        <>
+                          <div key={`task-name-${key}`} className="ag-cell ag-row-task">
+                            <div className="row-task-name">
+                              <span className="proj-dot" style={{ background: proj.color }} />
+                              <div style={{ color: "var(--text)" }}>{proj.name}</div>
+                            </div>
+                          </div>
+                          {entries.map((entry, wIdx) => (
+                            <div
+                              key={`task-${key}-${wIdx}`}
+                              className={`ag-cell ag-row-task${canEdit ? " editable-cell" : ""}`}
+                              style={{ padding: "0 var(--pad-x)", fontSize: 12, cursor: canEdit ? "pointer" : "default" }}
+                              onClick={() => canEdit && openEdit(entry, u.id, projectId, proj.name, u.name ?? u.email ?? "?")}
+                              title={canEdit ? "Click to edit" : undefined}
+                            >
+                              {entry.hours > 0 ? `${entry.hours}h` : <span className="muted" style={{ color: "var(--text-muted)" }}>-</span>}
+                              {canEdit && entry.hours === 0 && <span className="edit-hint" style={{ marginLeft: 4, opacity: 0.4, fontSize: 10 }}>+</span>}
+                            </div>
+                          ))}
+                          <div key={`task-sum-${key}`} className="ag-cell ag-row-task" style={{ justifyContent: "flex-end" }}>
+                            <span className="mono" style={{ color: "var(--text-secondary)", fontSize: 12 }}>
+                              {entries.reduce((s, e) => s + e.hours, 0)}h
+                            </span>
+                          </div>
+                        </>
+                      );
+                    })}
+                  </>
+                );
+              })}
+
+              {/* Team total row */}
+              <div className="ag-cell" style={{ background: "var(--surface-2)", fontWeight: 600 }}>Team total</div>
+              {weekTotals.map((t, i) => (
+                <div key={`total-${i}`} className="ag-cell" style={{ background: "var(--surface-2)", padding: 0 }}>
+                  <div className="alloc-cell" style={{ width: "100%" }}>
+                    <div className="figures">
+                      <span className="hrs">{t.h}h</span>
+                      <span className="pct">{t.pct}% · cap {t.cap}h</span>
+                    </div>
+                    <div className="bar">
+                      <span style={{ width: `${Math.min(100, t.pct)}%`, background: t.pct > 100 ? "var(--bad)" : t.pct >= 90 ? "var(--warn)" : "var(--ok)" }} />
                     </div>
                   </div>
                 </div>
-                {weeks.map((w, wIdx) => (
-                  <div key={`${u.id}-w${wIdx}`} className="ag-cell ag-row-person" style={{ padding: 0 }}>
-                    <AllocCell hours={userWeekHours(u.id, wIdx)} capacity={u.capacity} unit={unit} />
-                  </div>
-                ))}
-                <div key={`total-${u.id}`} className="ag-cell ag-row-person" style={{ padding: 0 }}>
-                  <div className={`total-cell ${totalPct > 100 ? "bad" : ""}`}>
-                    <span className="t-h">{totalH}h</span>
-                    <span className="t-p">{totalPct}% · cap {totalCap}h</span>
-                  </div>
-                </div>
-
-                {open && lines.map(([key, entries]) => {
-                  const [projectId] = key.split("__");
-                  const proj = projects.find((p) => p.id === projectId);
-                  if (!proj) return null;
-                  return (
-                    <>
-                      <div key={`task-name-${key}`} className="ag-cell ag-row-task">
-                        <div className="row-task-name">
-                          <span className="proj-dot" style={{ background: proj.color }} />
-                          <div style={{ color: "var(--text)" }}>{proj.name}</div>
-                        </div>
-                      </div>
-                      {entries.map((entry, wIdx) => (
-                        <div
-                          key={`task-${key}-${wIdx}`}
-                          className={`ag-cell ag-row-task${canEdit ? " editable-cell" : ""}`}
-                          style={{ padding: "0 var(--pad-x)", fontSize: 12, cursor: canEdit ? "pointer" : "default" }}
-                          onClick={() => canEdit && openEdit(entry, u.id, projectId, proj.name, u.name ?? u.email ?? "?")}
-                          title={canEdit ? "Click to edit" : undefined}
-                        >
-                          {entry.hours > 0 ? `${entry.hours}h` : <span className="muted" style={{ color: "var(--text-muted)" }}>-</span>}
-                          {canEdit && entry.hours === 0 && <span className="edit-hint" style={{ marginLeft: 4, opacity: 0.4, fontSize: 10 }}>+</span>}
-                        </div>
-                      ))}
-                      <div key={`task-sum-${key}`} className="ag-cell ag-row-task" style={{ justifyContent: "flex-end" }}>
-                        <span className="mono" style={{ color: "var(--text-secondary)", fontSize: 12 }}>
-                          {entries.reduce((s, e) => s + e.hours, 0)}h
-                        </span>
-                      </div>
-                    </>
-                  );
-                })}
-              </>
-            );
-          })}
-
-          {/* Team total row */}
-          <div className="ag-cell" style={{ background: "var(--surface-2)", fontWeight: 600 }}>Team total</div>
-          {weekTotals.map((t, i) => (
-            <div key={`total-${i}`} className="ag-cell" style={{ background: "var(--surface-2)", padding: 0 }}>
-              <div className="alloc-cell" style={{ width: "100%" }}>
-                <div className="figures">
-                  <span className="hrs">{t.h}h</span>
-                  <span className="pct">{t.pct}% · cap {t.cap}h</span>
-                </div>
-                <div className="bar">
-                  <span style={{ width: `${Math.min(100, t.pct)}%`, background: t.pct > 100 ? "var(--bad)" : t.pct >= 90 ? "var(--warn)" : "var(--ok)" }} />
+              ))}
+              <div className="ag-cell" style={{ background: "var(--surface-2)", padding: 0 }}>
+                <div className="total-cell">
+                  <span className="t-h">{grandH}h</span>
+                  <span className="t-p">{grandPct}% of {grandCap}h</span>
                 </div>
               </div>
             </div>
-          ))}
-          <div className="ag-cell" style={{ background: "var(--surface-2)", padding: 0 }}>
-            <div className="total-cell">
-              <span className="t-h">{grandH}h</span>
-              <span className="t-p">{grandPct}% of {grandCap}h</span>
-            </div>
           </div>
-        </div>
-      </div>
 
-      <div className="row" style={{ gap: 16, marginTop: 14, color: "var(--text-muted)", fontSize: 12 }}>
-        <span className="row" style={{ gap: 6 }}><span className="chip-dot" style={{ background: "var(--ok)" }} /> Healthy &lt; 90%</span>
-        <span className="row" style={{ gap: 6 }}><span className="chip-dot" style={{ background: "var(--warn)" }} /> Near cap 90–100%</span>
-        <span className="row" style={{ gap: 6 }}><span className="chip-dot" style={{ background: "var(--bad)" }} /> Over &gt; 100%</span>
-        <span className="row" style={{ gap: 6 }}><span className="chip-dot" style={{ background: "var(--idle)" }} /> Idle</span>
-      </div>
+          <div className="row" style={{ gap: 16, marginTop: 14, color: "var(--text-muted)", fontSize: 12 }}>
+            <span className="row" style={{ gap: 6 }}><span className="chip-dot" style={{ background: "var(--ok)" }} /> Healthy &lt; 90%</span>
+            <span className="row" style={{ gap: 6 }}><span className="chip-dot" style={{ background: "var(--warn)" }} /> Near cap 90–100%</span>
+            <span className="row" style={{ gap: 6 }}><span className="chip-dot" style={{ background: "var(--bad)" }} /> Over &gt; 100%</span>
+            <span className="row" style={{ gap: 6 }}><span className="chip-dot" style={{ background: "var(--idle)" }} /> Idle</span>
+          </div>
+        </>
+      )}
 
       {/* Edit Allocation Modal */}
       {editState && (
@@ -433,46 +485,30 @@ export function AllocationsClient({ users, allocations, projects, weeks, allWeek
             </div>
             <div className="modal-body">
               <div className="field">
-                <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-                  {editState.engineerName} / {editState.projName}
-                </span>
-                <span style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginTop: 2 }}>
-                  {editState.startDate} to {editState.endDate}
-                </span>
+                <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{editState.engineerName} / {editState.projName}</span>
+                <span style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginTop: 2 }}>{editState.startDate} to {editState.endDate}</span>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <label className="field">
                   <span>Start date</span>
-                  <input type="date" value={editState.startDate}
-                    onChange={(e) => setEditState((s) => s ? { ...s, startDate: e.target.value } : s)} />
+                  <input type="date" value={editState.startDate} onChange={(e) => setEditState((s) => s ? { ...s, startDate: e.target.value } : s)} />
                 </label>
                 <label className="field">
                   <span>End date</span>
-                  <input type="date" value={editState.endDate} min={editState.startDate}
-                    onChange={(e) => setEditState((s) => s ? { ...s, endDate: e.target.value } : s)} />
+                  <input type="date" value={editState.endDate} min={editState.startDate} onChange={(e) => setEditState((s) => s ? { ...s, endDate: e.target.value } : s)} />
                 </label>
               </div>
               <label className="field">
                 <span>Hours per day</span>
-                <input
-                  type="number" min={1} max={24} value={editHours} autoFocus
+                <input type="number" min={1} max={24} value={editHours} autoFocus
                   onChange={(e) => setEditHours(Number(e.target.value))}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleEditSave(); if (e.key === "Escape") setEditState(null); }}
-                />
+                  onKeyDown={(e) => { if (e.key === "Enter") handleEditSave(); if (e.key === "Escape") setEditState(null); }} />
               </label>
               <div className="modal-foot" style={{ justifyContent: "space-between" }}>
-                <div>
-                  {editState.allocationId && (
-                    <button type="button" className="btn danger" disabled={editSaving} onClick={handleEditDelete}>
-                      Delete
-                    </button>
-                  )}
-                </div>
+                <div>{editState.allocationId && <button type="button" className="btn danger" disabled={editSaving} onClick={handleEditDelete}>Delete</button>}</div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button type="button" className="btn" onClick={() => setEditState(null)}>Cancel</button>
-                  <button type="button" className="btn primary" disabled={editSaving} onClick={handleEditSave}>
-                    {editSaving ? "Saving..." : "Save"}
-                  </button>
+                  <button type="button" className="btn primary" disabled={editSaving} onClick={handleEditSave}>{editSaving ? "Saving…" : "Save"}</button>
                 </div>
               </div>
             </div>
@@ -506,26 +542,13 @@ export function AllocationsClient({ users, allocations, projects, weeks, allWeek
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <label className="field">
                   <span>Start date</span>
-                  <input
-                    type="date"
-                    value={newAlloc.startDate}
-                    onChange={(e) => setNewAlloc((s) => ({
-                      ...s,
-                      startDate: e.target.value,
-                      endDate: s.endDate < e.target.value ? e.target.value : s.endDate,
-                    }))}
-                    required
-                  />
+                  <input type="date" value={newAlloc.startDate}
+                    onChange={(e) => setNewAlloc((s) => ({ ...s, startDate: e.target.value, endDate: s.endDate < e.target.value ? e.target.value : s.endDate }))} required />
                 </label>
                 <label className="field">
                   <span>End date</span>
-                  <input
-                    type="date"
-                    value={newAlloc.endDate}
-                    min={newAlloc.startDate}
-                    onChange={(e) => setNewAlloc((s) => ({ ...s, endDate: e.target.value }))}
-                    required
-                  />
+                  <input type="date" value={newAlloc.endDate} min={newAlloc.startDate}
+                    onChange={(e) => setNewAlloc((s) => ({ ...s, endDate: e.target.value }))} required />
                 </label>
               </div>
               <label className="field">
@@ -535,9 +558,7 @@ export function AllocationsClient({ users, allocations, projects, weeks, allWeek
               </label>
               <div className="modal-foot">
                 <button type="button" className="btn" onClick={() => setShowNewModal(false)}>Cancel</button>
-                <button type="submit" className="btn primary" disabled={saving}>
-                  {saving ? "Creating..." : "Create"}
-                </button>
+                <button type="submit" className="btn primary" disabled={saving}>{saving ? "Creating…" : "Create"}</button>
               </div>
             </form>
           </div>
@@ -546,4 +567,3 @@ export function AllocationsClient({ users, allocations, projects, weeks, allWeek
     </div>
   );
 }
-
