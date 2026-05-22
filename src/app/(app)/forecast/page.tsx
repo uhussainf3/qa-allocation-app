@@ -18,12 +18,26 @@ export default async function ForecastPage() {
   const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
   const holidays    = new Set(rawHolidays.map((h) => h.date));
 
+  // Nominal (full-week) team capacity — shown in KPI tile as the baseline
   const totalCapacityPerWeek = users.reduce((s, u) => s + u.capacity, 0);
 
+  /** Holiday-aware working-day count for Mon–Fri of the given week. */
+  function weekWorkingDays(monday: Date): number {
+    let days = 0;
+    for (let i = 0; i < 5; i++) {
+      const cur = new Date(monday); cur.setDate(monday.getDate() + i);
+      if (!holidays.has(cur.toISOString().slice(0, 10))) days++;
+    }
+    return days;
+  }
+
   const weeksData = weeks90.map((w, i) => {
-    const demand = allocations.reduce((s, a) => s + workingDaysInWeek(w, a.startDate, a.endDate, holidays) * a.hoursPerDay, 0);
-    const utilPct = totalCapacityPerWeek > 0 ? Math.round((demand / totalCapacityPerWeek) * 100) : 0;
-    return { label: getWeekLabel(w), demand, capacity: totalCapacityPerWeek, utilPct, period: i < 4 ? "30d" : i < 9 ? "60d" : "90d" };
+    const demand  = allocations.reduce((s, a) => s + workingDaysInWeek(w, a.startDate, a.endDate, holidays) * a.hoursPerDay, 0);
+    // Effective capacity scales by holiday-adjusted working days for this specific week
+    const wDays   = weekWorkingDays(w);
+    const weekCap = users.reduce((s, u) => s + u.capacity * wDays / 5, 0);
+    const utilPct = weekCap > 0 ? Math.round((demand / weekCap) * 100) : 0;
+    return { label: getWeekLabel(w), demand, capacity: Math.round(weekCap), utilPct, period: i < 4 ? "30d" : i < 9 ? "60d" : "90d" };
   });
 
   const periods = [

@@ -18,6 +18,16 @@ export default async function ConflictsPage() {
   const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
   const holidays    = new Set(rawHolidays.map((h) => h.date));
 
+  /** Holiday-aware working-day count for Mon–Fri of the given week. */
+  function weekWorkingDays(monday: Date): number {
+    let days = 0;
+    for (let i = 0; i < 5; i++) {
+      const cur = new Date(monday); cur.setDate(monday.getDate() + i);
+      if (!holidays.has(cur.toISOString().slice(0, 10))) days++;
+    }
+    return days;
+  }
+
   type Conflict = {
     id: string; severity: string; engineer: string; week: string;
     allocated: number; capacity: number; project: string; description: string;
@@ -27,8 +37,10 @@ export default async function ConflictsPage() {
   users.forEach((u) => {
     weeks.forEach((w) => {
       const weekAllocs = allocations.filter((a) => a.userId === u.id && workingDaysInWeek(w, a.startDate, a.endDate, holidays) > 0);
-      const totalH = weekAllocs.reduce((s, a) => s + workingDaysInWeek(w, a.startDate, a.endDate, holidays) * a.hoursPerDay, 0);
-      const pct = u.capacity > 0 ? Math.round((totalH / u.capacity) * 100) : 0;
+      const totalH  = weekAllocs.reduce((s, a) => s + workingDaysInWeek(w, a.startDate, a.endDate, holidays) * a.hoursPerDay, 0);
+      const wDays   = weekWorkingDays(w);
+      const effCap  = u.capacity * wDays / 5;
+      const pct     = effCap > 0 ? Math.round((totalH / effCap) * 100) : 0;
       if (pct > 100) {
         conflicts.push({
           id: `${u.id}-${w.toISOString()}`,
@@ -36,9 +48,9 @@ export default async function ConflictsPage() {
           engineer: u.name ?? "Unknown",
           week: w.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
           allocated: totalH,
-          capacity: u.capacity,
+          capacity: Math.round(effCap),
           project: weekAllocs.map((a) => a.project.name).join(", "),
-          description: `${u.name} is allocated ${totalH}h against ${u.capacity}h capacity (${pct}%)`,
+          description: `${u.name} is allocated ${totalH}h against ${Math.round(effCap)}h effective capacity (${pct}%)`,
         });
       }
     });

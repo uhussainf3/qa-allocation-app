@@ -99,6 +99,17 @@ function workingDaysInWeek(
   return days;
 }
 
+/** Holiday-aware working-day count for the full Mon–Fri span of a given week. */
+function weekWorkingDays(weekMonISO: string, holidays: Set<string>): number {
+  const mon = new Date(weekMonISO + "T00:00:00");
+  let days = 0;
+  for (let i = 0; i < 5; i++) {
+    const cur = new Date(mon); cur.setDate(mon.getDate() + i);
+    if (!holidays.has(cur.toISOString().slice(0, 10))) days++;
+  }
+  return days;
+}
+
 function statusForPct(pct: number) {
   if (pct === 0) return "idle";
   if (pct > 100) return "bad";
@@ -109,7 +120,7 @@ function statusForPct(pct: number) {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function AllocCell({ hours, capacity, unit }: { hours: number; capacity: number; unit: string }) {
-  const pct    = Math.round((hours / capacity) * 100);
+  const pct    = capacity > 0 ? Math.round((hours / capacity) * 100) : 0;
   const status = statusForPct(pct);
   return (
     <div className={`alloc-cell ${status}`} style={{ width: "100%" }}>
@@ -185,14 +196,16 @@ export function AllocationsClient({ currentUserRole }: Props) {
     let wMon = getMondayOf(start);
     let guard = 0;
     while (wMon <= end && guard++ < 104) {
-      const wStr = wMon.toISOString().slice(0, 10);
+      const wStr   = wMon.toISOString().slice(0, 10);
       const newDays = workingDaysInWeek(wStr, startISO, endISO, holidaySet);
       if (newDays > 0) {
+        const wDays  = weekWorkingDays(wStr, holidaySet);
+        const effCap = user.capacity * wDays / 5;
         const existH = existing.reduce((s, a) => {
           const d = workingDaysInWeek(wStr, a.startDate.slice(0, 10), a.endDate.slice(0, 10), holidaySet);
           return s + d * a.hoursPerDay;
         }, 0);
-        if (existH + newDays * hpd > user.capacity) {
+        if (existH + newDays * hpd > effCap) {
           overWeeks.push(wMon.toLocaleDateString("en-GB", { day: "numeric", month: "short" }));
         }
       }
@@ -310,16 +323,21 @@ export function AllocationsClient({ currentUserRole }: Props) {
     Object.values(allocMap[userId] ?? {}).reduce((s, arr) => s + (arr[wIdx]?.hours ?? 0), 0);
   const userTotalHours = (userId: string) =>
     weeks.reduce((s, _, i) => s + userWeekHours(userId, i), 0);
-  const weekTotals     = weeks.map((_, i) => {
-    const h   = users.reduce((s, u) => s + userWeekHours(u.id, i), 0);
-    const cap = users.reduce((s, u) => s + u.capacity, 0);
-    return { h, cap, pct: cap > 0 ? Math.round((h / cap) * 100) : 0 };
+  const weekTotals     = weeks.map((w, i) => {
+    const h     = users.reduce((s, u) => s + userWeekHours(u.id, i), 0);
+    const wDays = weekWorkingDays(w.date.slice(0, 10), holidaySet);
+    const cap   = users.reduce((s, u) => s + u.capacity * wDays / 5, 0);
+    return { h, cap: Math.round(cap), pct: cap > 0 ? Math.round((h / cap) * 100) : 0 };
   });
   const grandH    = weekTotals.reduce((s, t) => s + t.h, 0);
-  const grandCap  = users.reduce((s, u) => s + u.capacity * weeks.length, 0);
+  const grandCap  = weekTotals.reduce((s, t) => s + t.cap, 0);
   const grandPct  = grandCap > 0 ? Math.round((grandH / grandCap) * 100) : 0;
   const overCount = users.reduce((s, u) =>
-    s + weeks.reduce((x, _, i) => x + (userWeekHours(u.id, i) > u.capacity ? 1 : 0), 0), 0);
+    s + weeks.reduce((x, w, i) => {
+      const wDays  = weekWorkingDays(w.date.slice(0, 10), holidaySet);
+      const effCap = u.capacity * wDays / 5;
+      return x + (effCap > 0 && userWeekHours(u.id, i) > effCap ? 1 : 0);
+    }, 0), 0);
 
   const initials = (name: string | null, email: string | null) =>
     (name ?? email ?? "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -452,7 +470,10 @@ export function AllocationsClient({ currentUserRole }: Props) {
               {users.map((u) => {
                 const open     = expanded[u.id];
                 const totalH   = userTotalHours(u.id);
-                const totalCap = u.capacity * weeks.length;
+                const totalCap = Math.round(weeks.reduce((s, w) => {
+                  const wDays = weekWorkingDays(w.date.slice(0, 10), holidaySet);
+                  return s + u.capacity * wDays / 5;
+                }, 0));
                 const totalPct = totalCap > 0 ? Math.round((totalH / totalCap) * 100) : 0;
                 const lines    = Object.entries(allocMap[u.id] ?? {});
                 return (
@@ -469,7 +490,11 @@ export function AllocationsClient({ currentUserRole }: Props) {
                     </div>
                     {weeks.map((w, wIdx) => (
                       <div key={`${u.id}-w${wIdx}`} className="ag-cell ag-row-person" style={{ padding: 0 }}>
-                        <AllocCell hours={userWeekHours(u.id, wIdx)} capacity={u.capacity} unit={unit} />
+                        <AllocCell
+                          hours={userWeekHours(u.id, wIdx)}
+                          capacity={Math.round(u.capacity * weekWorkingDays(w.date.slice(0, 10), holidaySet) / 5)}
+                          unit={unit}
+                        />
                       </div>
                     ))}
                     <div key={`total-${u.id}`} className="ag-cell ag-row-person" style={{ padding: 0 }}>

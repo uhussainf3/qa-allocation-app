@@ -33,6 +33,18 @@ export default async function BenchPage({ searchParams }: PageProps) {
   const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
   const holidays    = new Set(rawHolidays.map((h) => h.date));
 
+  // Pre-compute holiday-adjusted multiplier: sum of (working_days_in_week / 5) over the range.
+  // e.g. 2 weeks with 0 holidays → 2.0; week with 3 holidays → 0.4, so 2-week range = 1.4
+  let weekMultiplierSum = 0;
+  for (let i = 0; i < weekCount; i++) {
+    let wDays = 0;
+    for (let d = 0; d < 5; d++) {
+      const day = new Date(fromDate.getTime() + (i * 7 + d) * 86400000);
+      if (!holidays.has(day.toISOString().slice(0, 10))) wDays++;
+    }
+    weekMultiplierSum += wDays / 5;
+  }
+
   const bench = users.map((u) => {
     const allocated = allocations
       .filter((a) => a.userId === u.id)
@@ -43,9 +55,10 @@ export default async function BenchPage({ searchParams }: PageProps) {
         const days   = totalWorkingDays(oStart, oEnd, holidays);
         return s + days * a.hoursPerDay;
       }, 0);
-    const totalCapacity = u.capacity * weekCount;
-    const free         = Math.max(0, totalCapacity - allocated);
-    const utilPct      = totalCapacity > 0 ? Math.round((allocated / totalCapacity) * 100) : 0;
+    // Holiday-adjusted total capacity: scales each week by its working-day fraction
+    const totalCapacity = Math.round(u.capacity * weekMultiplierSum);
+    const free          = Math.max(0, totalCapacity - allocated);
+    const utilPct       = totalCapacity > 0 ? Math.round((allocated / totalCapacity) * 100) : 0;
     return { ...u, allocated, free, utilPct, totalCapacity };
   }).sort((a, b) => b.free - a.free);
 
