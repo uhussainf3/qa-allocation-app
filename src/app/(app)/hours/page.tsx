@@ -13,7 +13,7 @@ export default async function HoursPage({ searchParams }: PageProps) {
 
   // If a ?week= param is given use that Monday; otherwise default to this week
   const monday = week
-    ? getMondayOf(new Date(week + "T00:00:00"))
+    ? getMondayOf(new Date(week + "T00:00:00Z"))   // force UTC so getUTCDay() sees the correct day
     : getMondayOf(new Date());
 
   const [projects, logs] = await Promise.all([

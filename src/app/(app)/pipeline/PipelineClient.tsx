@@ -346,7 +346,7 @@ export function PipelineClient({ initialItems, currentUserRole }: Props) {
 
         {/* Detail panel */}
         {selected && (
-          <div className="card" style={{ position: "sticky", top: 16 }}>
+          <div className="card" style={{ position: "sticky", top: 16, maxHeight: "calc(100vh - 32px)", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <div style={{ fontWeight: 700, fontSize: 15 }}>{selected.name}</div>
               <div style={{ display: "flex", gap: 6 }}>
