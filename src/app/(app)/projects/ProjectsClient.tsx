@@ -24,17 +24,54 @@ const COLORS = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"
 interface Props { projects: Project[]; currentUserRole: Role; }
 
 export function ProjectsClient({ projects, currentUserRole }: Props) {
-  const [selected, setSelected] = useState<Project | null>(projects[0] ?? null);
-  const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ name: "", code: "", clientName: "", sanctionedHours: 0, color: COLORS[0], status: "ACTIVE", startDate: "", endDate: "", description: "" });
-  const [saving, setSaving] = useState(false);
-  const [showBreakdown, setShowBreakdown] = useState(false);
+  const [selected,       setSelected]       = useState<Project | null>(projects[0] ?? null);
+  const [showModal,      setShowModal]      = useState(false);
+  const [showEditModal,  setShowEditModal]  = useState(false);
+  const [form,           setForm]           = useState({ name: "", code: "", clientName: "", sanctionedHours: 0, color: COLORS[0], status: "ACTIVE", startDate: "", endDate: "", description: "" });
+  const [editForm,       setEditForm]       = useState({ name: "", clientName: "", sanctionedHours: 0, color: COLORS[0], status: "ACTIVE", startDate: "", endDate: "", description: "" });
+  const [saving,         setSaving]         = useState(false);
+  const [editSaving,     setEditSaving]     = useState(false);
+  const [showBreakdown,  setShowBreakdown]  = useState(false);
 
   const canEdit = currentUserRole === "ADMIN" || currentUserRole === "PROJECT_MANAGER";
 
   function selectProject(p: Project) {
     setSelected(p);
     setShowBreakdown(false);
+  }
+
+  function openEdit() {
+    if (!selected) return;
+    setEditForm({
+      name:           selected.name,
+      clientName:     selected.clientName     ?? "",
+      sanctionedHours: selected.sanctionedHours,
+      color:          selected.color,
+      status:         selected.status,
+      startDate:      selected.startDate ? selected.startDate.slice(0, 10) : "",
+      endDate:        selected.endDate   ? selected.endDate.slice(0, 10)   : "",
+      description:    selected.description ?? "",
+    });
+    setShowEditModal(true);
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selected) return;
+    setEditSaving(true);
+    try {
+      const res = await fetch(`/api/projects/${selected.id}`, {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...editForm,
+          sanctionedHours: Number(editForm.sanctionedHours),
+          startDate: editForm.startDate || null,
+          endDate:   editForm.endDate   || null,
+        }),
+      });
+      if (res.ok) { setShowEditModal(false); window.location.reload(); }
+    } finally { setEditSaving(false); }
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -113,7 +150,10 @@ export function ProjectsClient({ projects, currentUserRole }: Props) {
                 </div>
               </div>
               {canEdit && (
-                <button className="btn sm" style={{ color: "var(--bad)" }} onClick={() => handleDelete(proj.id)}>Delete</button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="btn sm" onClick={openEdit}>Edit</button>
+                  <button className="btn sm" style={{ color: "var(--bad)" }} onClick={() => handleDelete(proj.id)}>Delete</button>
+                </div>
               )}
             </div>
 
@@ -216,6 +256,68 @@ export function ProjectsClient({ projects, currentUserRole }: Props) {
           </div>
         )}
       </div>
+
+      {/* Edit Modal */}
+      {showEditModal && selected && (
+        <div className="modal-backdrop" onClick={() => setShowEditModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div className="modal-head">
+              <h2>Edit {selected.name}</h2>
+              <button className="iconbtn" onClick={() => setShowEditModal(false)}>✕</button>
+            </div>
+            <form onSubmit={handleEdit} className="modal-body">
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <label className="field" style={{ gridColumn: "1 / -1" }}>
+                  <span>Project name</span>
+                  <input value={editForm.name} onChange={(e) => setEditForm((s) => ({ ...s, name: e.target.value }))} required />
+                </label>
+                <label className="field">
+                  <span>Client</span>
+                  <input value={editForm.clientName} onChange={(e) => setEditForm((s) => ({ ...s, clientName: e.target.value }))} />
+                </label>
+                <label className="field">
+                  <span>Sanctioned hours</span>
+                  <input type="number" min={0} value={editForm.sanctionedHours} onChange={(e) => setEditForm((s) => ({ ...s, sanctionedHours: Number(e.target.value) }))} />
+                </label>
+                <label className="field">
+                  <span>Status</span>
+                  <select value={editForm.status} onChange={(e) => setEditForm((s) => ({ ...s, status: e.target.value }))}>
+                    <option value="ACTIVE">Active</option>
+                    <option value="ON_HOLD">On Hold</option>
+                    <option value="COMPLETED">Completed</option>
+                    <option value="CANCELLED">Cancelled</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Start date</span>
+                  <input type="date" value={editForm.startDate} onChange={(e) => setEditForm((s) => ({ ...s, startDate: e.target.value }))} />
+                </label>
+                <label className="field">
+                  <span>End date</span>
+                  <input type="date" value={editForm.endDate} min={editForm.startDate} onChange={(e) => setEditForm((s) => ({ ...s, endDate: e.target.value }))} />
+                </label>
+                <label className="field" style={{ gridColumn: "1 / -1" }}>
+                  <span>Description</span>
+                  <input value={editForm.description} onChange={(e) => setEditForm((s) => ({ ...s, description: e.target.value }))} />
+                </label>
+                <label className="field" style={{ gridColumn: "1 / -1" }}>
+                  <span>Color</span>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {COLORS.map((c) => (
+                      <button key={c} type="button" onClick={() => setEditForm((s) => ({ ...s, color: c }))}
+                        style={{ width: 24, height: 24, borderRadius: "50%", background: c, border: editForm.color === c ? "3px solid var(--text)" : "2px solid transparent", cursor: "pointer" }} />
+                    ))}
+                  </div>
+                </label>
+              </div>
+              <div className="modal-foot" style={{ marginTop: 16 }}>
+                <button type="button" className="btn" onClick={() => setShowEditModal(false)}>Cancel</button>
+                <button type="submit" className="btn primary" disabled={editSaving}>{editSaving ? "Saving…" : "Save changes"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Create Modal */}
       {showModal && (

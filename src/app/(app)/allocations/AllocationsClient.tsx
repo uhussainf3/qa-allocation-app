@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getNextNWeeks, getWeekLabel, getWeekRange } from "@/lib/weeks";
+import { getNextNWeeks, getWeekLabel, getWeekRange, getMondayOf, addWeeks } from "@/lib/weeks";
 import type { Role } from "@/types/enums";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -159,6 +159,66 @@ export function AllocationsClient({ currentUserRole }: Props) {
   const [loading,     setLoading]     = useState(true);
 
   const holidaySet = useMemo(() => new Set(holidays.map((h) => h.date)), [holidays]);
+
+  // ── Conflict detection ────────────────────────────────────────────────────────
+  /**
+   * Returns a warning string if adding an allocation would over-allocate the
+   * engineer in any week, or null if everything is fine.
+   * Excludes the allocation being edited (by id) from the baseline.
+   */
+  function conflictWarning(
+    userId: string, startISO: string, endISO: string,
+    hpd: number, excludeId?: string | null
+  ): string | null {
+    if (!userId || !startISO || !endISO || hpd <= 0) return null;
+    const user = users.find((u) => u.id === userId);
+    if (!user || user.capacity <= 0) return null;
+
+    const existing = allocations.filter(
+      (a) => a.userId === userId && a.id !== (excludeId ?? "___")
+    );
+
+    const start = new Date(startISO + "T00:00:00");
+    const end   = new Date(endISO   + "T00:00:00");
+    const overWeeks: string[] = [];
+
+    let wMon = getMondayOf(start);
+    let guard = 0;
+    while (wMon <= end && guard++ < 104) {
+      const wStr = wMon.toISOString().slice(0, 10);
+      const newDays = workingDaysInWeek(wStr, startISO, endISO, holidaySet);
+      if (newDays > 0) {
+        const existH = existing.reduce((s, a) => {
+          const d = workingDaysInWeek(wStr, a.startDate.slice(0, 10), a.endDate.slice(0, 10), holidaySet);
+          return s + d * a.hoursPerDay;
+        }, 0);
+        if (existH + newDays * hpd > user.capacity) {
+          overWeeks.push(wMon.toLocaleDateString("en-GB", { day: "numeric", month: "short" }));
+        }
+      }
+      wMon = addWeeks(wMon, 1);
+    }
+
+    if (overWeeks.length === 0) return null;
+    const shown = overWeeks.slice(0, 3).join(", ");
+    const extra = overWeeks.length > 3 ? ` +${overWeeks.length - 3} more` : "";
+    return `⚠ Over capacity in ${overWeeks.length} week${overWeeks.length !== 1 ? "s" : ""}: ${shown}${extra}`;
+  }
+
+  const newAllocConflict = useMemo(
+    () => conflictWarning(newAlloc.userId, newAlloc.startDate, newAlloc.endDate, newAlloc.hoursPerDay),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [newAlloc.userId, newAlloc.startDate, newAlloc.endDate, newAlloc.hoursPerDay, allocations, holidaySet]
+  );
+
+  const editConflict = useMemo(
+    () => conflictWarning(
+      editState?.userId ?? "", editState?.startDate ?? "",
+      editState?.endDate ?? "", editHours, editState?.allocationId
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [editState?.userId, editState?.startDate, editState?.endDate, editHours, editState?.allocationId, allocations, holidaySet]
+  );
 
   // UI state
   const [unit,          setUnit]          = useState<"hrs" | "pct">("hrs");
@@ -516,6 +576,11 @@ export function AllocationsClient({ currentUserRole }: Props) {
                   onChange={(e) => setEditHours(Number(e.target.value))}
                   onKeyDown={(e) => { if (e.key === "Enter") handleEditSave(); if (e.key === "Escape") setEditState(null); }} />
               </label>
+              {editConflict && (
+                <div style={{ padding: "8px 12px", background: "var(--warn-soft, #fef3c7)", borderRadius: 6, fontSize: 12, color: "var(--warn-dark, #92400e)", marginTop: 4 }}>
+                  {editConflict}
+                </div>
+              )}
               <div className="modal-foot" style={{ justifyContent: "space-between" }}>
                 <div>{editState.allocationId && <button type="button" className="btn danger" disabled={editSaving} onClick={handleEditDelete}>Delete</button>}</div>
                 <div style={{ display: "flex", gap: 8 }}>
@@ -568,6 +633,11 @@ export function AllocationsClient({ currentUserRole }: Props) {
                 <input type="number" min={1} max={24} value={newAlloc.hoursPerDay}
                   onChange={(e) => setNewAlloc((s) => ({ ...s, hoursPerDay: Number(e.target.value) }))} required />
               </label>
+              {newAllocConflict && (
+                <div style={{ padding: "8px 12px", background: "var(--warn-soft, #fef3c7)", borderRadius: 6, fontSize: 12, color: "var(--warn-dark, #92400e)" }}>
+                  {newAllocConflict}
+                </div>
+              )}
               <div className="modal-foot">
                 <button type="button" className="btn" onClick={() => setShowNewModal(false)}>Cancel</button>
                 <button type="submit" className="btn primary" disabled={saving}>{saving ? "Creating…" : "Create"}</button>
