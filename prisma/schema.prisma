@@ -273,6 +273,25 @@ model NotificationPreference {
   prefs  String
 }
 
+// Pipeline — status: LEAD | QUALIFIED | PROPOSAL | NEGOTIATION | WON | LOST
+model Pipeline {
+  id                 String    @id @default(cuid())
+  name               String
+  clientName         String?
+  status             String    @default("LEAD")
+  probability        Int       @default(50)   // 0–100 %
+  dealSize           Float?                   // estimated budget
+  expectedStartDate  DateTime?
+  expectedEndDate    DateTime?
+  requiredHeadcount  Int       @default(1)
+  hoursPerWeek       Float     @default(40)
+  skillsRequired     String?
+  notes              String?
+  convertedProjectId String?                  // Project.id once converted
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
 // Public holidays — excluded from working-day calculations
 model PublicHoliday {
   id        String   @id @default(cuid())

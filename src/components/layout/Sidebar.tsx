@@ -12,11 +12,12 @@ const NAV: NavGroup[] = [
   {
     group: "Plan",
     items: [
-      { href: "/allocations", label: "Allocations" },
+      { href: "/allocations",     label: "Allocations"       },
       { href: "/allocation-list", label: "Manage Allocations" },
-      { href: "/capacity", label: "Capacity" },
-      { href: "/forecast", label: "Forecast" },
-      { href: "/leave", label: "Leave" },
+      { href: "/pipeline",        label: "Pipeline"           },
+      { href: "/capacity",        label: "Capacity"           },
+      { href: "/forecast",        label: "Forecast"           },
+      { href: "/leave",           label: "Leave"              },
     ],
   },
   {
