@@ -205,21 +205,6 @@ export function AllocationsClient({ currentUserRole }: Props) {
     return `⚠ Over capacity in ${overWeeks.length} week${overWeeks.length !== 1 ? "s" : ""}: ${shown}${extra}`;
   }
 
-  const newAllocConflict = useMemo(
-    () => conflictWarning(newAlloc.userId, newAlloc.startDate, newAlloc.endDate, newAlloc.hoursPerDay),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [newAlloc.userId, newAlloc.startDate, newAlloc.endDate, newAlloc.hoursPerDay, allocations, holidaySet]
-  );
-
-  const editConflict = useMemo(
-    () => conflictWarning(
-      editState?.userId ?? "", editState?.startDate ?? "",
-      editState?.endDate ?? "", editHours, editState?.allocationId
-    ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editState?.userId, editState?.startDate, editState?.endDate, editHours, editState?.allocationId, allocations, holidaySet]
-  );
-
   // UI state
   const [unit,          setUnit]          = useState<"hrs" | "pct">("hrs");
   const [expanded,      setExpanded]      = useState<Record<string, boolean>>({});
@@ -235,6 +220,22 @@ export function AllocationsClient({ currentUserRole }: Props) {
   });
 
   const canEdit = currentUserRole === "ADMIN" || currentUserRole === "PROJECT_MANAGER";
+
+  // Derived conflict warnings — computed after all state is declared
+  const newAllocConflict = useMemo(
+    () => conflictWarning(newAlloc.userId, newAlloc.startDate, newAlloc.endDate, newAlloc.hoursPerDay),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [newAlloc.userId, newAlloc.startDate, newAlloc.endDate, newAlloc.hoursPerDay, allocations, holidaySet]
+  );
+
+  const editConflict = useMemo(
+    () => conflictWarning(
+      editState?.userId ?? "", editState?.startDate ?? "",
+      editState?.endDate ?? "", editHours, editState?.allocationId
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [editState?.userId, editState?.startDate, editState?.endDate, editHours, editState?.allocationId, allocations, holidaySet]
+  );
 
   // ── Fetch + cache ────────────────────────────────────────────────────────────
   const fetchData = useCallback(async (nWeeks: number, background = false) => {
