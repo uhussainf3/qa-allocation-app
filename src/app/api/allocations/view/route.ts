@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { unauthorized } from "@/lib/apiResponse";
 import { NextResponse } from "next/server";
-import { getCachedActiveUsers, getCachedAllocationsInRange, getCachedActiveProjects } from "@/lib/queries";
+import { getCachedActiveUsers, getCachedAllocationsInRange, getCachedActiveProjects, getCachedPublicHolidays } from "@/lib/queries";
 import { getMondayOf, addWeeks } from "@/lib/weeks";
 
 /**
@@ -19,14 +19,15 @@ export async function GET(req: Request) {
   const from = getMondayOf(new Date());
   const to   = addWeeks(from, nWeeks);
 
-  const [users, allocations, projects] = await Promise.all([
+  const [users, allocations, projects, holidays] = await Promise.all([
     getCachedActiveUsers(),
     getCachedAllocationsInRange(from.toISOString(), to.toISOString()),
     getCachedActiveProjects(),
+    getCachedPublicHolidays(),
   ]);
 
   return NextResponse.json(
-    { users, allocations, projects },
+    { users, allocations, projects, holidays },
     {
       headers: {
         // Tell browser: serve stale for up to 60s, always revalidate in bg

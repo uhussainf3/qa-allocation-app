@@ -30,21 +30,29 @@ export function getNextNWeeks(n: number, from?: Date): Date[] {
   return Array.from({ length: n }, (_, i) => addWeeks(start, i));
 }
 
+/** Convert a Date to a YYYY-MM-DD UTC string for holiday set lookups. */
+function toYMD(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
 /**
- * Returns the number of working days (Mon–Fri) within a week column
- * that overlap with the allocation range [allocStart, allocEnd].
+ * Returns the number of working days (Mon–Fri, excluding public holidays)
+ * within a week column that overlap with the allocation range [allocStart, allocEnd].
+ *
+ * @param holidays  Optional set of YYYY-MM-DD strings to skip (public holidays).
  */
 export function workingDaysInWeek(
   weekMonday: Date,
   allocStart: Date,
-  allocEnd: Date
+  allocEnd:   Date,
+  holidays?:  Set<string>
 ): number {
   const weekFriday = new Date(weekMonday);
   weekFriday.setDate(weekMonday.getDate() + 4);
 
   // Overlap window
-  const overlapStart = allocStart > weekMonday  ? allocStart : weekMonday;
-  const overlapEnd   = allocEnd   < weekFriday  ? allocEnd   : weekFriday;
+  const overlapStart = allocStart > weekMonday ? allocStart : weekMonday;
+  const overlapEnd   = allocEnd   < weekFriday ? allocEnd   : weekFriday;
 
   if (overlapStart > overlapEnd) return 0;
 
@@ -52,22 +60,24 @@ export function workingDaysInWeek(
   const cur = new Date(overlapStart);
   while (cur <= overlapEnd) {
     const dow = cur.getDay();
-    if (dow >= 1 && dow <= 5) days++;
+    if (dow >= 1 && dow <= 5 && !holidays?.has(toYMD(cur))) days++;
     cur.setDate(cur.getDate() + 1);
   }
   return days;
 }
 
 /**
- * Total working days (Mon–Fri) between two dates inclusive.
+ * Total working days (Mon–Fri, excluding public holidays) between two dates inclusive.
+ *
+ * @param holidays  Optional set of YYYY-MM-DD strings to skip (public holidays).
  */
-export function totalWorkingDays(start: Date, end: Date): number {
+export function totalWorkingDays(start: Date, end: Date, holidays?: Set<string>): number {
   if (start > end) return 0;
   let days = 0;
   const cur = new Date(start);
   while (cur <= end) {
     const dow = cur.getDay();
-    if (dow >= 1 && dow <= 5) days++;
+    if (dow >= 1 && dow <= 5 && !holidays?.has(toYMD(cur))) days++;
     cur.setDate(cur.getDate() + 1);
   }
   return days;

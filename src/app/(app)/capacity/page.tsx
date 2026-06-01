@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
-import { getNextNWeeks, getWeekLabel, getMondayOf } from "@/lib/weeks";
-import { getCachedSimpleUsers, getCachedAllocationsMinimal, getCachedApprovedLeaves } from "@/lib/queries";
+import { getNextNWeeks, getWeekLabel, getMondayOf, workingDaysInWeek } from "@/lib/weeks";
+import { getCachedSimpleUsers, getCachedAllocationsMinimal, getCachedApprovedLeaves, getCachedPublicHolidays } from "@/lib/queries";
 
 export default async function CapacityPage() {
   await auth();
@@ -11,30 +11,32 @@ export default async function CapacityPage() {
   const fromISO = weeks[0].toISOString();
   const toISO   = weekEnd.toISOString();
 
-  const [users, rawAllocations, rawLeaves] = await Promise.all([
+  const [users, rawAllocations, rawLeaves, rawHolidays] = await Promise.all([
     getCachedSimpleUsers(),
     getCachedAllocationsMinimal(fromISO, toISO),
     getCachedApprovedLeaves(fromISO, toISO),
+    getCachedPublicHolidays(),
   ]);
 
   // Convert ISO strings back to Date objects for server-side calculations
   const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
   const leaves      = rawLeaves.map((l) => ({ ...l, startDate: new Date(l.startDate), endDate: new Date(l.endDate) }));
-
-  function workDaysInWeek(wMon: Date, aStart: Date, aEnd: Date): number {
-    const wFri = new Date(wMon); wFri.setDate(wMon.getDate() + 4);
-    const oS = aStart > wMon ? aStart : wMon;
-    const oE = aEnd   < wFri ? aEnd   : wFri;
-    if (oS > oE) return 0;
-    let d = 0; const c = new Date(oS);
-    while (c <= oE) { const dw = c.getDay(); if (dw >= 1 && dw <= 5) d++; c.setDate(c.getDate() + 1); }
-    return d;
-  }
+  const holidays    = new Set(rawHolidays.map((h) => h.date));
 
   function weekHours(userId: string, monday: Date) {
     return allocations
       .filter((a) => a.userId === userId)
-      .reduce((s, a) => s + workDaysInWeek(monday, a.startDate, a.endDate) * a.hoursPerDay, 0);
+      .reduce((s, a) => s + workingDaysInWeek(monday, a.startDate, a.endDate, holidays) * a.hoursPerDay, 0);
+  }
+
+  /** Effective capacity for one week: scales by non-holiday working days / 5. */
+  function weekCapacity(monday: Date, perWeekCap: number): number {
+    let days = 0;
+    for (let i = 0; i < 5; i++) {
+      const cur = new Date(monday); cur.setDate(monday.getDate() + i);
+      if (!holidays.has(cur.toISOString().slice(0, 10))) days++;
+    }
+    return perWeekCap * days / 5;
   }
 
   function hasLeave(userId: string, monday: Date) {
@@ -76,15 +78,16 @@ export default async function CapacityPage() {
               <tr key={u.id}>
                 <td style={{ padding: "4px 12px", fontWeight: 500 }}>{u.name}</td>
                 {weeks.map((w) => {
-                  const h = weekHours(u.id, w);
-                  const pct = u.capacity > 0 ? Math.round((h / u.capacity) * 100) : 0;
-                  const lvl = heatLevel(pct);
+                  const h       = weekHours(u.id, w);
+                  const effCap  = weekCapacity(w, u.capacity);
+                  const pct     = effCap > 0 ? Math.round((h / effCap) * 100) : 0;
+                  const lvl     = heatLevel(pct);
                   const onLeave = hasLeave(u.id, w);
                   return (
                     <td key={w.toISOString()} style={{ padding: "3px 4px", textAlign: "center" }}>
                       <div
                         className={`heat-cell lvl-${lvl}${onLeave ? " leave" : ""}`}
-                        title={`${h}h / ${u.capacity}h (${pct}%)`}
+                        title={`${h}h / ${Math.round(effCap)}h (${pct}%)`}
                         style={{ borderRadius: 4, padding: "4px 2px", fontSize: 11, fontFamily: "var(--mono)" }}
                       >
                         {h > 0 ? `${pct}%` : onLeave ? "⏸" : "—"}

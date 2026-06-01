@@ -12,17 +12,19 @@ const NAV: NavGroup[] = [
   {
     group: "Plan",
     items: [
-      { href: "/allocations", label: "Allocations" },
+      { href: "/allocations",     label: "Allocations"       },
       { href: "/allocation-list", label: "Manage Allocations" },
-      { href: "/capacity", label: "Capacity" },
-      { href: "/forecast", label: "Forecast" },
-      { href: "/leave", label: "Leave" },
+      { href: "/pipeline",        label: "Pipeline"           },
+      { href: "/capacity",        label: "Capacity"           },
+      { href: "/forecast",        label: "Forecast"           },
+      { href: "/leave",           label: "Leave"              },
     ],
   },
   {
     group: "Work",
     items: [
       { href: "/projects", label: "Projects" },
+      { href: "/tasks",    label: "My Tasks"  },
       { href: "/hours", label: "Hours log" },
       { href: "/timesheets", label: "Timesheets" },
       { href: "/requests", label: "Requests" },
@@ -41,8 +43,9 @@ const NAV: NavGroup[] = [
   {
     group: "Admin",
     items: [
-      { href: "/import", label: "Import" },
-      { href: "/notifications", label: "Notifications" },
+      { href: "/import",         label: "Import"         },
+      { href: "/notifications",  label: "Notifications"  },
+      { href: "/settings",       label: "Settings"       },
     ],
     roles: ["ADMIN", "PROJECT_MANAGER"],
   },

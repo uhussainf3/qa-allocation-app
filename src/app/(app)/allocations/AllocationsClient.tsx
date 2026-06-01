@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getNextNWeeks, getWeekLabel, getWeekRange } from "@/lib/weeks";
+import { getNextNWeeks, getWeekLabel, getWeekRange, getMondayOf, addWeeks } from "@/lib/weeks";
 import type { Role } from "@/types/enums";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -22,7 +22,8 @@ type EditState  = {
   startDate: string; endDate: string; hoursPerDay: number;
   projName: string; engineerName: string;
 };
-type ViewData   = { users: User[]; allocations: Allocation[]; projects: Project[] };
+type Holiday    = { id: string; date: string; name: string };
+type ViewData   = { users: User[]; allocations: Allocation[]; projects: Project[]; holidays: Holiday[] };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -74,7 +75,12 @@ function toMonday(dateStr: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-function workingDaysInWeek(weekMonISO: string, allocStart: string, allocEnd: string): number {
+function workingDaysInWeek(
+  weekMonISO: string,
+  allocStart: string,
+  allocEnd:   string,
+  holidays?:  Set<string>
+): number {
   const wMon   = new Date(weekMonISO + "T00:00:00");
   const wFri   = new Date(wMon); wFri.setDate(wMon.getDate() + 4);
   const aStart = new Date(allocStart + "T00:00:00");
@@ -85,9 +91,21 @@ function workingDaysInWeek(weekMonISO: string, allocStart: string, allocEnd: str
   let days = 0;
   const cur = new Date(oStart);
   while (cur <= oEnd) {
-    const d = cur.getDay();
-    if (d >= 1 && d <= 5) days++;
+    const d   = cur.getDay();
+    const ymd = cur.toISOString().slice(0, 10);
+    if (d >= 1 && d <= 5 && !holidays?.has(ymd)) days++;
     cur.setDate(cur.getDate() + 1);
+  }
+  return days;
+}
+
+/** Holiday-aware working-day count for the full Mon–Fri span of a given week. */
+function weekWorkingDays(weekMonISO: string, holidays: Set<string>): number {
+  const mon = new Date(weekMonISO + "T00:00:00");
+  let days = 0;
+  for (let i = 0; i < 5; i++) {
+    const cur = new Date(mon); cur.setDate(mon.getDate() + i);
+    if (!holidays.has(cur.toISOString().slice(0, 10))) days++;
   }
   return days;
 }
@@ -102,7 +120,7 @@ function statusForPct(pct: number) {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function AllocCell({ hours, capacity, unit }: { hours: number; capacity: number; unit: string }) {
-  const pct    = Math.round((hours / capacity) * 100);
+  const pct    = capacity > 0 ? Math.round((hours / capacity) * 100) : 0;
   const status = statusForPct(pct);
   return (
     <div className={`alloc-cell ${status}`} style={{ width: "100%" }}>
@@ -148,7 +166,57 @@ export function AllocationsClient({ currentUserRole }: Props) {
   const [users,       setUsers]       = useState<User[]>([]);
   const [allocations, setAllocations] = useState<Allocation[]>([]);
   const [projects,    setProjects]    = useState<Project[]>([]);
+  const [holidays,    setHolidays]    = useState<Holiday[]>([]);
   const [loading,     setLoading]     = useState(true);
+
+  const holidaySet = useMemo(() => new Set(holidays.map((h) => h.date)), [holidays]);
+
+  // ── Conflict detection ────────────────────────────────────────────────────────
+  /**
+   * Returns a warning string if adding an allocation would over-allocate the
+   * engineer in any week, or null if everything is fine.
+   * Excludes the allocation being edited (by id) from the baseline.
+   */
+  function conflictWarning(
+    userId: string, startISO: string, endISO: string,
+    hpd: number, excludeId?: string | null
+  ): string | null {
+    if (!userId || !startISO || !endISO || hpd <= 0) return null;
+    const user = users.find((u) => u.id === userId);
+    if (!user || user.capacity <= 0) return null;
+
+    const existing = allocations.filter(
+      (a) => a.userId === userId && a.id !== (excludeId ?? "___")
+    );
+
+    const start = new Date(startISO + "T00:00:00");
+    const end   = new Date(endISO   + "T00:00:00");
+    const overWeeks: string[] = [];
+
+    let wMon = getMondayOf(start);
+    let guard = 0;
+    while (wMon <= end && guard++ < 104) {
+      const wStr   = wMon.toISOString().slice(0, 10);
+      const newDays = workingDaysInWeek(wStr, startISO, endISO, holidaySet);
+      if (newDays > 0) {
+        const wDays  = weekWorkingDays(wStr, holidaySet);
+        const effCap = user.capacity * wDays / 5;
+        const existH = existing.reduce((s, a) => {
+          const d = workingDaysInWeek(wStr, a.startDate.slice(0, 10), a.endDate.slice(0, 10), holidaySet);
+          return s + d * a.hoursPerDay;
+        }, 0);
+        if (existH + newDays * hpd > effCap) {
+          overWeeks.push(wMon.toLocaleDateString("en-GB", { day: "numeric", month: "short" }));
+        }
+      }
+      wMon = addWeeks(wMon, 1);
+    }
+
+    if (overWeeks.length === 0) return null;
+    const shown = overWeeks.slice(0, 3).join(", ");
+    const extra = overWeeks.length > 3 ? ` +${overWeeks.length - 3} more` : "";
+    return `⚠ Over capacity in ${overWeeks.length} week${overWeeks.length !== 1 ? "s" : ""}: ${shown}${extra}`;
+  }
 
   // UI state
   const [unit,          setUnit]          = useState<"hrs" | "pct">("hrs");
@@ -166,6 +234,22 @@ export function AllocationsClient({ currentUserRole }: Props) {
 
   const canEdit = currentUserRole === "ADMIN" || currentUserRole === "PROJECT_MANAGER";
 
+  // Derived conflict warnings — computed after all state is declared
+  const newAllocConflict = useMemo(
+    () => conflictWarning(newAlloc.userId, newAlloc.startDate, newAlloc.endDate, newAlloc.hoursPerDay),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [newAlloc.userId, newAlloc.startDate, newAlloc.endDate, newAlloc.hoursPerDay, allocations, holidaySet]
+  );
+
+  const editConflict = useMemo(
+    () => conflictWarning(
+      editState?.userId ?? "", editState?.startDate ?? "",
+      editState?.endDate ?? "", editHours, editState?.allocationId
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [editState?.userId, editState?.startDate, editState?.endDate, editHours, editState?.allocationId, allocations, holidaySet]
+  );
+
   // ── Fetch + cache ────────────────────────────────────────────────────────────
   const fetchData = useCallback(async (nWeeks: number, background = false) => {
     if (!background) setLoading(true);
@@ -176,6 +260,7 @@ export function AllocationsClient({ currentUserRole }: Props) {
       setUsers(data.users);
       setAllocations(data.allocations);
       setProjects(data.projects);
+      setHolidays(data.holidays ?? []);
       writeCache(nWeeks, data);
     } catch {
       // keep whatever is in state already
@@ -191,6 +276,7 @@ export function AllocationsClient({ currentUserRole }: Props) {
       setUsers(cached.users);
       setAllocations(cached.allocations);
       setProjects(cached.projects);
+      setHolidays(cached.holidays ?? []);
       setLoading(false);
       fetchData(activeWeeks, true); // background refresh
     } else {
@@ -217,7 +303,7 @@ export function AllocationsClient({ currentUserRole }: Props) {
         m[a.userId][key] = weeks.map(() => ({ hours: 0, id: null, hoursPerDay: 0, startDate: "", endDate: "" }));
       }
       weeks.forEach((w, wIdx) => {
-        const days = workingDaysInWeek(w.date.slice(0, 10), a.startDate.slice(0, 10), a.endDate.slice(0, 10));
+        const days = workingDaysInWeek(w.date.slice(0, 10), a.startDate.slice(0, 10), a.endDate.slice(0, 10), holidaySet);
         if (days > 0) {
           const prev = m[a.userId][key][wIdx];
           m[a.userId][key][wIdx] = {
@@ -231,22 +317,27 @@ export function AllocationsClient({ currentUserRole }: Props) {
       });
     });
     return m;
-  }, [allocations, users, weeks]);
+  }, [allocations, users, weeks, holidaySet]);
 
   const userWeekHours  = (userId: string, wIdx: number) =>
     Object.values(allocMap[userId] ?? {}).reduce((s, arr) => s + (arr[wIdx]?.hours ?? 0), 0);
   const userTotalHours = (userId: string) =>
     weeks.reduce((s, _, i) => s + userWeekHours(userId, i), 0);
-  const weekTotals     = weeks.map((_, i) => {
-    const h   = users.reduce((s, u) => s + userWeekHours(u.id, i), 0);
-    const cap = users.reduce((s, u) => s + u.capacity, 0);
-    return { h, cap, pct: cap > 0 ? Math.round((h / cap) * 100) : 0 };
+  const weekTotals     = weeks.map((w, i) => {
+    const h     = users.reduce((s, u) => s + userWeekHours(u.id, i), 0);
+    const wDays = weekWorkingDays(w.date.slice(0, 10), holidaySet);
+    const cap   = users.reduce((s, u) => s + u.capacity * wDays / 5, 0);
+    return { h, cap: Math.round(cap), pct: cap > 0 ? Math.round((h / cap) * 100) : 0 };
   });
   const grandH    = weekTotals.reduce((s, t) => s + t.h, 0);
-  const grandCap  = users.reduce((s, u) => s + u.capacity * weeks.length, 0);
+  const grandCap  = weekTotals.reduce((s, t) => s + t.cap, 0);
   const grandPct  = grandCap > 0 ? Math.round((grandH / grandCap) * 100) : 0;
   const overCount = users.reduce((s, u) =>
-    s + weeks.reduce((x, _, i) => x + (userWeekHours(u.id, i) > u.capacity ? 1 : 0), 0), 0);
+    s + weeks.reduce((x, w, i) => {
+      const wDays  = weekWorkingDays(w.date.slice(0, 10), holidaySet);
+      const effCap = u.capacity * wDays / 5;
+      return x + (effCap > 0 && userWeekHours(u.id, i) > effCap ? 1 : 0);
+    }, 0), 0);
 
   const initials = (name: string | null, email: string | null) =>
     (name ?? email ?? "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -379,7 +470,10 @@ export function AllocationsClient({ currentUserRole }: Props) {
               {users.map((u) => {
                 const open     = expanded[u.id];
                 const totalH   = userTotalHours(u.id);
-                const totalCap = u.capacity * weeks.length;
+                const totalCap = Math.round(weeks.reduce((s, w) => {
+                  const wDays = weekWorkingDays(w.date.slice(0, 10), holidaySet);
+                  return s + u.capacity * wDays / 5;
+                }, 0));
                 const totalPct = totalCap > 0 ? Math.round((totalH / totalCap) * 100) : 0;
                 const lines    = Object.entries(allocMap[u.id] ?? {});
                 return (
@@ -396,7 +490,11 @@ export function AllocationsClient({ currentUserRole }: Props) {
                     </div>
                     {weeks.map((w, wIdx) => (
                       <div key={`${u.id}-w${wIdx}`} className="ag-cell ag-row-person" style={{ padding: 0 }}>
-                        <AllocCell hours={userWeekHours(u.id, wIdx)} capacity={u.capacity} unit={unit} />
+                        <AllocCell
+                          hours={userWeekHours(u.id, wIdx)}
+                          capacity={Math.round(u.capacity * weekWorkingDays(w.date.slice(0, 10), holidaySet) / 5)}
+                          unit={unit}
+                        />
                       </div>
                     ))}
                     <div key={`total-${u.id}`} className="ag-cell ag-row-person" style={{ padding: 0 }}>
@@ -504,6 +602,11 @@ export function AllocationsClient({ currentUserRole }: Props) {
                   onChange={(e) => setEditHours(Number(e.target.value))}
                   onKeyDown={(e) => { if (e.key === "Enter") handleEditSave(); if (e.key === "Escape") setEditState(null); }} />
               </label>
+              {editConflict && (
+                <div style={{ padding: "8px 12px", background: "var(--warn-soft, #fef3c7)", borderRadius: 6, fontSize: 12, color: "var(--warn-dark, #92400e)", marginTop: 4 }}>
+                  {editConflict}
+                </div>
+              )}
               <div className="modal-foot" style={{ justifyContent: "space-between" }}>
                 <div>{editState.allocationId && <button type="button" className="btn danger" disabled={editSaving} onClick={handleEditDelete}>Delete</button>}</div>
                 <div style={{ display: "flex", gap: 8 }}>
@@ -556,6 +659,11 @@ export function AllocationsClient({ currentUserRole }: Props) {
                 <input type="number" min={1} max={24} value={newAlloc.hoursPerDay}
                   onChange={(e) => setNewAlloc((s) => ({ ...s, hoursPerDay: Number(e.target.value) }))} required />
               </label>
+              {newAllocConflict && (
+                <div style={{ padding: "8px 12px", background: "var(--warn-soft, #fef3c7)", borderRadius: 6, fontSize: 12, color: "var(--warn-dark, #92400e)" }}>
+                  {newAllocConflict}
+                </div>
+              )}
               <div className="modal-foot">
                 <button type="button" className="btn" onClick={() => setShowNewModal(false)}>Cancel</button>
                 <button type="submit" className="btn primary" disabled={saving}>{saving ? "Creating…" : "Create"}</button>

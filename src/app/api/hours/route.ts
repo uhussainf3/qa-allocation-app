@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ok, err, unauthorized } from "@/lib/apiResponse";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 
 const createSchema = z.object({
@@ -49,15 +50,16 @@ export async function POST(req: Request) {
 
   const log = await prisma.hoursLog.create({
     data: {
-      userId: session.user.id,
+      userId:    session.user.id,
       projectId: parsed.data.projectId,
-      taskId: parsed.data.taskId,
-      date: new Date(parsed.data.date),
-      hours: parsed.data.hours,
-      notes: parsed.data.notes,
-      status: "DRAFT",
+      taskId:    parsed.data.taskId,
+      date:      new Date(parsed.data.date),
+      hours:     parsed.data.hours,
+      notes:     parsed.data.notes,
+      status:    "DRAFT",
     },
   });
 
+  revalidateTag("projects", "max");
   return ok(log, 201);
 }

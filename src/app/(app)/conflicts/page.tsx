@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
-import { getNextNWeeks, getMondayOf } from "@/lib/weeks";
-import { getCachedSimpleUsers, getCachedConflictAllocations } from "@/lib/queries";
+import { getNextNWeeks, getMondayOf, workingDaysInWeek } from "@/lib/weeks";
+import { getCachedSimpleUsers, getCachedConflictAllocations, getCachedPublicHolidays } from "@/lib/queries";
 
 export default async function ConflictsPage() {
   await auth();
@@ -8,35 +8,39 @@ export default async function ConflictsPage() {
   const weekEnd = new Date(weeks[weeks.length - 1]);
   weekEnd.setDate(weekEnd.getDate() + 7);
 
-  const [users, rawAllocations] = await Promise.all([
+  const [users, rawAllocations, rawHolidays] = await Promise.all([
     getCachedSimpleUsers(),
     getCachedConflictAllocations(weeks[0].toISOString(), weekEnd.toISOString()),
+    getCachedPublicHolidays(),
   ]);
 
   // Convert ISO strings back to Date objects for server-side calculations
   const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
+  const holidays    = new Set(rawHolidays.map((h) => h.date));
+
+  /** Holiday-aware working-day count for Mon–Fri of the given week. */
+  function weekWorkingDays(monday: Date): number {
+    let days = 0;
+    for (let i = 0; i < 5; i++) {
+      const cur = new Date(monday); cur.setDate(monday.getDate() + i);
+      if (!holidays.has(cur.toISOString().slice(0, 10))) days++;
+    }
+    return days;
+  }
 
   type Conflict = {
     id: string; severity: string; engineer: string; week: string;
     allocated: number; capacity: number; project: string; description: string;
   };
 
-  function workDaysInWeek(wMon: Date, aStart: Date, aEnd: Date): number {
-    const wFri = new Date(wMon); wFri.setDate(wMon.getDate() + 4);
-    const oS = aStart > wMon ? aStart : wMon;
-    const oE = aEnd   < wFri ? aEnd   : wFri;
-    if (oS > oE) return 0;
-    let d = 0; const c = new Date(oS);
-    while (c <= oE) { const dw = c.getDay(); if (dw >= 1 && dw <= 5) d++; c.setDate(c.getDate() + 1); }
-    return d;
-  }
-
   const conflicts: Conflict[] = [];
   users.forEach((u) => {
     weeks.forEach((w) => {
-      const weekAllocs = allocations.filter((a) => a.userId === u.id && workDaysInWeek(w, a.startDate, a.endDate) > 0);
-      const totalH = weekAllocs.reduce((s, a) => s + workDaysInWeek(w, a.startDate, a.endDate) * a.hoursPerDay, 0);
-      const pct = u.capacity > 0 ? Math.round((totalH / u.capacity) * 100) : 0;
+      const weekAllocs = allocations.filter((a) => a.userId === u.id && workingDaysInWeek(w, a.startDate, a.endDate, holidays) > 0);
+      const totalH  = weekAllocs.reduce((s, a) => s + workingDaysInWeek(w, a.startDate, a.endDate, holidays) * a.hoursPerDay, 0);
+      const wDays   = weekWorkingDays(w);
+      const effCap  = u.capacity * wDays / 5;
+      const pct     = effCap > 0 ? Math.round((totalH / effCap) * 100) : 0;
       if (pct > 100) {
         conflicts.push({
           id: `${u.id}-${w.toISOString()}`,
@@ -44,9 +48,9 @@ export default async function ConflictsPage() {
           engineer: u.name ?? "Unknown",
           week: w.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
           allocated: totalH,
-          capacity: u.capacity,
+          capacity: Math.round(effCap),
           project: weekAllocs.map((a) => a.project.name).join(", "),
-          description: `${u.name} is allocated ${totalH}h against ${u.capacity}h capacity (${pct}%)`,
+          description: `${u.name} is allocated ${totalH}h against ${Math.round(effCap)}h effective capacity (${pct}%)`,
         });
       }
     });

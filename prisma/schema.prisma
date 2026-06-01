@@ -70,6 +70,7 @@ model User {
   resourceRequestsCreated  ResourceRequest[] @relation("RequestCreatedBy")
   resourceRequestsAssigned ResourceRequest[] @relation("RequestAssignedTo")
   timesheets               Timesheet[]
+  assignedTasks            Task[]            @relation("AssignedTasks")
 }
 
 // Project — status: ACTIVE | ON_HOLD | COMPLETED | CANCELLED
@@ -96,21 +97,28 @@ model Project {
 }
 
 model Task {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   name           String
   description    String?
   projectId      String
   parentId       String?
-  estimatedHours Float    @default(0)
-  order          Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  assignedUserId String?
+  status         String    @default("TODO")      // TODO | IN_PROGRESS | IN_REVIEW | DONE | BLOCKED
+  priority       String    @default("MEDIUM")    // LOW | MEDIUM | HIGH | CRITICAL
+  estimatedHours Float     @default(0)
+  dueDate        DateTime?
+  jiraId         String?                         // Jira issue ID (future integration)
+  jiraKey        String?                         // e.g. "QA-123"
+  order          Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  parent      Task?        @relation("SubTasks", fields: [parentId], references: [id])
-  subtasks    Task[]       @relation("SubTasks")
-  allocations Allocation[]
-  hoursLogs   HoursLog[]
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent       Task?        @relation("SubTasks", fields: [parentId], references: [id])
+  subtasks     Task[]       @relation("SubTasks")
+  assignedUser User?        @relation("AssignedTasks", fields: [assignedUserId], references: [id])
+  allocations  Allocation[]
+  hoursLogs    HoursLog[]
 }
 
 model Allocation {
@@ -271,4 +279,33 @@ model NotificationPreference {
   id     String @id @default(cuid())
   userId String @unique
   prefs  String
+}
+
+// Pipeline — status: LEAD | QUALIFIED | PROPOSAL | NEGOTIATION | WON | LOST
+model Pipeline {
+  id                 String    @id @default(cuid())
+  name               String
+  clientName         String?
+  status             String    @default("LEAD")
+  probability        Int       @default(50)   // 0–100 %
+  dealSize           Float?                   // estimated budget
+  expectedStartDate  DateTime?
+  expectedEndDate    DateTime?
+  requiredHeadcount  Int       @default(1)
+  hoursPerWeek       Float     @default(40)
+  skillsRequired     String?
+  notes              String?
+  convertedProjectId String?                  // Project.id once converted
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+// Public holidays — excluded from working-day calculations
+model PublicHoliday {
+  id        String   @id @default(cuid())
+  date      DateTime // stored at UTC midnight
+  name      String
+  createdAt DateTime @default(now())
+
+  @@unique([date])
 }

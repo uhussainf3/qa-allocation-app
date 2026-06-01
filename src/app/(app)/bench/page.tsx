@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
-import { getMondayOf, addWeeks } from "@/lib/weeks";
-import { getCachedSimpleUsers, getCachedAllocationsMinimal } from "@/lib/queries";
+import { getMondayOf, addWeeks, totalWorkingDays } from "@/lib/weeks";
+import { getCachedSimpleUsers, getCachedAllocationsMinimal, getCachedPublicHolidays } from "@/lib/queries";
 import { BenchClient } from "./BenchClient";
 
 interface PageProps {
@@ -23,39 +23,42 @@ export default async function BenchPage({ searchParams }: PageProps) {
   // Fetch all allocation weeks in the range
   const rangeEnd = addWeeks(safeToDate, 1); // exclusive upper bound
 
-  const [users, rawAllocations] = await Promise.all([
+  const [users, rawAllocations, rawHolidays] = await Promise.all([
     getCachedSimpleUsers(),
     getCachedAllocationsMinimal(fromDate.toISOString(), rangeEnd.toISOString()),
+    getCachedPublicHolidays(),
   ]);
 
   // Convert ISO strings back to Date objects for server-side calculations
   const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
+  const holidays    = new Set(rawHolidays.map((h) => h.date));
 
-  // Count working days per allocation that overlap the selected range
-  function workingDaysOverlap(aStart: Date, aEnd: Date, rStart: Date, rEnd: Date): number {
-    const oStart = aStart > rStart ? aStart : rStart;
-    const oEnd   = aEnd   < rEnd   ? aEnd   : rEnd;
-    if (oStart > oEnd) return 0;
-    let days = 0;
-    const cur = new Date(oStart);
-    while (cur <= oEnd) {
-      const d = cur.getDay();
-      if (d >= 1 && d <= 5) days++;
-      cur.setDate(cur.getDate() + 1);
+  // Pre-compute holiday-adjusted multiplier: sum of (working_days_in_week / 5) over the range.
+  // e.g. 2 weeks with 0 holidays → 2.0; week with 3 holidays → 0.4, so 2-week range = 1.4
+  let weekMultiplierSum = 0;
+  for (let i = 0; i < weekCount; i++) {
+    let wDays = 0;
+    for (let d = 0; d < 5; d++) {
+      const day = new Date(fromDate.getTime() + (i * 7 + d) * 86400000);
+      if (!holidays.has(day.toISOString().slice(0, 10))) wDays++;
     }
-    return days;
+    weekMultiplierSum += wDays / 5;
   }
 
   const bench = users.map((u) => {
     const allocated = allocations
       .filter((a) => a.userId === u.id)
       .reduce((s, a) => {
-        const days = workingDaysOverlap(a.startDate, a.endDate, fromDate, safeToDate);
+        // Clamp to selected range, then count holiday-aware working days
+        const oStart = a.startDate > fromDate  ? a.startDate : fromDate;
+        const oEnd   = a.endDate   < safeToDate ? a.endDate  : safeToDate;
+        const days   = totalWorkingDays(oStart, oEnd, holidays);
         return s + days * a.hoursPerDay;
       }, 0);
-    const totalCapacity = u.capacity * weekCount;
-    const free         = Math.max(0, totalCapacity - allocated);
-    const utilPct      = totalCapacity > 0 ? Math.round((allocated / totalCapacity) * 100) : 0;
+    // Holiday-adjusted total capacity: scales each week by its working-day fraction
+    const totalCapacity = Math.round(u.capacity * weekMultiplierSum);
+    const free          = Math.max(0, totalCapacity - allocated);
+    const utilPct       = totalCapacity > 0 ? Math.round((allocated / totalCapacity) * 100) : 0;
     return { ...u, allocated, free, utilPct, totalCapacity };
   }).sort((a, b) => b.free - a.free);
 
