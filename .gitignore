@@ -48,3 +48,13 @@ prisma/dev.db-shm
 
 # Windows shortcuts
 *.lnk
+
+.vercel
+
+# Claude Code & Playwright test artifacts
+.claude/
+.playwright-mcp/
+scripts/
+
+# Test screenshots
+*.png

@@ -24,6 +24,7 @@ const NAV: NavGroup[] = [
     group: "Work",
     items: [
       { href: "/projects", label: "Projects" },
+      { href: "/tasks",    label: "My Tasks"  },
       { href: "/hours", label: "Hours log" },
       { href: "/timesheets", label: "Timesheets" },
       { href: "/requests", label: "Requests" },

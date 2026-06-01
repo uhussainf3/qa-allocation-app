@@ -7,14 +7,17 @@ import { getMondayOf } from "@/lib/weeks";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Project = { id: string; name: string; code: string; color: string };
+type TaskOption = { id: string; name: string; status: string };
 type Log = {
   id: string;
   projectId: string;
+  taskId: string | null;
   date: string;
   hours: number;
   notes: string | null;
   status: string;
   project: { id: string; name: string; color: string };
+  task:    { id: string; name: string } | null;
 };
 
 interface Props {
@@ -35,17 +38,21 @@ export function HoursClient({ projects, logs, weekStart }: Props) {
   // ── Form state ───────────────────────────────────────────────────────────────
   const [form, setForm] = useState({
     projectId: "",
+    taskId:    "",
     date:      monday.toISOString().slice(0, 10),
     hours:     8,
     notes:     "",
   });
-  const [saving,      setSaving]      = useState(false);
-  const [submitting,  setSubmitting]  = useState(false);
-  const [deletingId,  setDeletingId]  = useState<string | null>(null);
-  const [editId,      setEditId]      = useState<string | null>(null);
-  const [editHours,   setEditHours]   = useState(0);
-  const [editNotes,   setEditNotes]   = useState("");
-  const [editSaving,  setEditSaving]  = useState(false);
+  const [saving,       setSaving]       = useState(false);
+  const [submitting,   setSubmitting]   = useState(false);
+  const [deletingId,   setDeletingId]   = useState<string | null>(null);
+  const [editId,       setEditId]       = useState<string | null>(null);
+  const [editHours,    setEditHours]    = useState(0);
+  const [editNotes,    setEditNotes]    = useState("");
+  const [editSaving,   setEditSaving]   = useState(false);
+  // Task picker
+  const [taskOptions,  setTaskOptions]  = useState<TaskOption[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
 
   // ── Derived ──────────────────────────────────────────────────────────────────
   const days = Array.from({ length: 5 }, (_, i) => {
@@ -62,6 +69,29 @@ export function HoursClient({ projects, logs, weekStart }: Props) {
     return monday.toISOString().slice(0, 10) === thisMonday.toISOString().slice(0, 10);
   }
 
+  // ── Task loader ───────────────────────────────────────────────────────────────
+  async function loadTasksForProject(projectId: string) {
+    if (!projectId) { setTaskOptions([]); return; }
+    setTasksLoading(true);
+    try {
+      const res  = await fetch(`/api/tasks?projectId=${projectId}`);
+      const json = await res.json();
+      // Flatten top-level + subtasks, exclude DONE tasks
+      const all: TaskOption[] = [];
+      for (const t of (json.data ?? json)) {
+        if (t.status !== "DONE") all.push({ id: t.id, name: t.name, status: t.status });
+        for (const st of t.subtasks ?? []) {
+          if (st.status !== "DONE") all.push({ id: st.id, name: `↳ ${st.name}`, status: st.status });
+        }
+      }
+      setTaskOptions(all);
+    } catch {
+      setTaskOptions([]);
+    } finally {
+      setTasksLoading(false);
+    }
+  }
+
   // ── Week navigation ──────────────────────────────────────────────────────────
   function navWeek(dir: -1 | 1) {
     const d = new Date(monday); d.setDate(d.getDate() + dir * 7);
@@ -76,9 +106,13 @@ export function HoursClient({ projects, logs, weekStart }: Props) {
       await fetch("/api/hours", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify(form),
+        body:    JSON.stringify({
+          ...form,
+          taskId: form.taskId || null,
+        }),
       });
-      setForm((s) => ({ ...s, projectId: "", notes: "", hours: 8 }));
+      setForm((s) => ({ ...s, projectId: "", taskId: "", notes: "", hours: 8 }));
+      setTaskOptions([]);
       refresh();
     } finally { setSaving(false); }
   }
@@ -234,7 +268,14 @@ export function HoursClient({ projects, logs, weekStart }: Props) {
               /* ── Normal row ── */
               <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border-faint)" }}>
                 <span style={{ width: 10, height: 10, borderRadius: "50%", background: l.project.color, flexShrink: 0 }} />
-                <span style={{ flex: 1, fontWeight: 500, fontSize: 13 }}>{l.project.name}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>{l.project.name}</div>
+                  {l.task && (
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {l.task.name}
+                    </div>
+                  )}
+                </div>
                 <span style={{ fontFamily: "var(--mono)", fontSize: 13 }}>{l.hours}h</span>
                 {l.notes && (
                   <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{l.notes}</span>
@@ -274,13 +315,18 @@ export function HoursClient({ projects, logs, weekStart }: Props) {
         <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 14 }}>Log hours</div>
         <form
           onSubmit={handleAdd}
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto auto", gap: 10, alignItems: "end" }}
+          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10, alignItems: "end" }}
         >
+          {/* Project */}
           <label className="field">
             <span>Project</span>
             <select
               value={form.projectId}
-              onChange={(e) => setForm((s) => ({ ...s, projectId: e.target.value }))}
+              onChange={(e) => {
+                const pid = e.target.value;
+                setForm((s) => ({ ...s, projectId: pid, taskId: "" }));
+                loadTasksForProject(pid);
+              }}
               required
             >
               <option value="">Select project…</option>
@@ -289,6 +335,22 @@ export function HoursClient({ projects, logs, weekStart }: Props) {
               ))}
             </select>
           </label>
+
+          {/* Task (shown once project is selected) */}
+          <label className="field">
+            <span>Task {tasksLoading && <span style={{ fontSize: 10, color: "var(--text-muted)" }}>(loading…)</span>}</span>
+            <select
+              value={form.taskId}
+              onChange={(e) => setForm((s) => ({ ...s, taskId: e.target.value }))}
+              disabled={!form.projectId || tasksLoading}
+            >
+              <option value="">— no specific task —</option>
+              {taskOptions.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </label>
+
           <label className="field">
             <span>Notes</span>
             <input
@@ -307,9 +369,11 @@ export function HoursClient({ projects, logs, weekStart }: Props) {
               required
             />
           </label>
-          <button type="submit" className="btn primary" disabled={saving}>
-            {saving ? "Adding…" : "Add"}
-          </button>
+          <div style={{ paddingTop: 18 }}>
+            <button type="submit" className="btn primary" style={{ width: "100%" }} disabled={saving}>
+              {saving ? "Adding…" : "Add"}
+            </button>
+          </div>
         </form>
       </div>
 
