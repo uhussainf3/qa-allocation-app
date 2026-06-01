@@ -9,6 +9,7 @@ import type { Role } from "@/types/enums";
 type TaskUser   = { id: string; name: string | null };
 type Subtask    = {
   id: string; name: string; description: string | null;
+  parentId: string | null;
   assignedUserId: string | null; assignedUser: TaskUser | null;
   status: string; priority: string;
   estimatedHours: number; actualHours: number;
