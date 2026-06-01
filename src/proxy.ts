@@ -8,7 +8,8 @@ export default auth((req) => {
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/auth") ||
-    pathname.startsWith("/api/test")   // dev-only test helpers
+    // dev-only test helpers — never whitelisted in production
+    (pathname.startsWith("/api/test") && process.env.NODE_ENV !== "production")
   ) {
     return NextResponse.next();
   }
