@@ -80,15 +80,20 @@ function initials(name: string | null, email: string | null): string {
     .toUpperCase();
 }
 
+type StatusFilter = "active" | "upcoming" | "expired" | "all";
+
 export function AllocationListClient({ allocations, currentUserRole }: Props) {
   const canEdit = currentUserRole === "ADMIN" || currentUserRole === "PROJECT_MANAGER";
 
-  const [search, setSearch]               = useState("");
+  const [search,        setSearch]        = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
-  const [editState, setEditState]         = useState<EditState | null>(null);
-  const [saving, setSaving]               = useState(false);
-  const [deleteId, setDeleteId]           = useState<string | null>(null);
-  const [deleting, setDeleting]           = useState(false);
+  const [statusFilter,  setStatusFilter]  = useState<StatusFilter>("active");
+  const [editState,     setEditState]     = useState<EditState | null>(null);
+  const [saving,        setSaving]        = useState(false);
+  const [deleteId,      setDeleteId]      = useState<string | null>(null);
+  const [deleting,      setDeleting]      = useState(false);
+
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   const projects = useMemo(() => {
     const seen = new Map<string, { id: string; name: string; code: string }>();
@@ -99,19 +104,38 @@ export function AllocationListClient({ allocations, currentUserRole }: Props) {
     return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [allocations]);
 
+  // Tab counts — computed once from full list
+  const counts = useMemo(() => ({
+    active:   allocations.filter((a) => a.startDate.slice(0,10) <= todayStr && a.endDate.slice(0,10) >= todayStr).length,
+    upcoming: allocations.filter((a) => a.startDate.slice(0,10) > todayStr).length,
+    expired:  allocations.filter((a) => a.endDate.slice(0,10)   < todayStr).length,
+    all:      allocations.length,
+  }), [allocations, todayStr]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     return allocations.filter((a) => {
+      // Date filter
+      const start = a.startDate.slice(0, 10);
+      const end   = a.endDate.slice(0, 10);
+      if (statusFilter === "active"   && !(start <= todayStr && end >= todayStr)) return false;
+      if (statusFilter === "upcoming" && !(start > todayStr))                     return false;
+      if (statusFilter === "expired"  && !(end   < todayStr))                     return false;
+
+      // Project filter
       if (projectFilter !== "all" && a.project.id !== projectFilter) return false;
+
+      // Search filter
       if (q && !(
         (a.user.name  ?? "").toLowerCase().includes(q) ||
         (a.user.email ?? "").toLowerCase().includes(q) ||
         a.project.name.toLowerCase().includes(q) ||
         a.project.code.toLowerCase().includes(q)
       )) return false;
+
       return true;
     });
-  }, [allocations, search, projectFilter]);
+  }, [allocations, search, projectFilter, statusFilter, todayStr]);
 
   function openEdit(a: Allocation) {
     setEditState({
@@ -186,6 +210,49 @@ export function AllocationListClient({ allocations, currentUserRole }: Props) {
         </div>
       </div>
 
+      {/* Status tabs */}
+      <div style={{ display: "flex", gap: 2, marginBottom: 16, borderBottom: "1px solid var(--border)" }}>
+        {([
+          { key: "active",   label: "Active"    },
+          { key: "upcoming", label: "Upcoming"  },
+          { key: "expired",  label: "Expired"   },
+          { key: "all",      label: "All"       },
+        ] as { key: StatusFilter; label: string }[]).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setStatusFilter(tab.key)}
+            style={{
+              padding:      "8px 16px",
+              border:       "none",
+              background:   "transparent",
+              borderBottom: statusFilter === tab.key ? "2px solid var(--accent)" : "2px solid transparent",
+              color:        statusFilter === tab.key ? "var(--accent)" : "var(--text-muted)",
+              fontWeight:   statusFilter === tab.key ? 600 : 400,
+              fontSize:     13,
+              cursor:       "pointer",
+              display:      "flex",
+              alignItems:   "center",
+              gap:          6,
+              marginBottom: -1,
+            }}
+          >
+            {tab.label}
+            <span style={{
+              fontSize:    11,
+              fontWeight:  500,
+              padding:     "1px 6px",
+              borderRadius: 10,
+              background:  statusFilter === tab.key ? "var(--accent)" : "var(--surface-2)",
+              color:       statusFilter === tab.key ? "#fff" : "var(--text-muted)",
+              minWidth:    20,
+              textAlign:   "center",
+            }}>
+              {counts[tab.key]}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {/* Filters */}
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <div className="search" style={{ width: 280 }}>
@@ -258,13 +325,18 @@ export function AllocationListClient({ allocations, currentUserRole }: Props) {
               </thead>
               <tbody>
                 {filtered.map((a, i) => {
-                  const pct      = calcPct(a.hoursPerDay, a.user.capacity);
-                  const isLast   = i === filtered.length - 1;
+                  const pct       = calcPct(a.hoursPerDay, a.user.capacity);
+                  const isLast    = i === filtered.length - 1;
+                  const isExpired = a.endDate.slice(0, 10) < todayStr;
+                  const isUpcoming = a.startDate.slice(0, 10) > todayStr;
 
                   return (
                     <tr
                       key={a.id}
-                      style={{ borderBottom: isLast ? "none" : "1px solid var(--border)" }}
+                      style={{
+                        borderBottom: isLast ? "none" : "1px solid var(--border)",
+                        opacity: isExpired ? 0.55 : 1,
+                      }}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "var(--surface-2)"; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = ""; }}
                     >
@@ -310,6 +382,8 @@ export function AllocationListClient({ allocations, currentUserRole }: Props) {
                       {/* End Date */}
                       <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12.5, whiteSpace: "nowrap" }}>
                         {fmtDate(a.endDate)}
+                        {isExpired  && <span className="chip bad"  style={{ marginLeft: 6, fontSize: 10, fontFamily: "var(--font-sans)" }}>Expired</span>}
+                        {isUpcoming && <span className="chip"      style={{ marginLeft: 6, fontSize: 10, fontFamily: "var(--font-sans)" }}>Upcoming</span>}
                       </td>
 
                       {/* Hrs / Day */}
