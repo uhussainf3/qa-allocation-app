@@ -1,185 +1,201 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type ActiveAllocation = {
+  projectId:    string;
+  projectName:  string;
+  projectColor: string;
+  pct:          number;   // % of daily capacity used by this allocation
+  endDate:      string;   // ISO
+};
 
 type BenchUser = {
-  id: string;
-  name: string | null;
-  email: string | null;
-  capacity: number;
-  role: string;
-  allocated: number;
-  free: number;
-  utilPct: number;
-  totalCapacity: number;
+  id:                 string;
+  name:               string | null;
+  email:              string | null;
+  capacity:           number;
+  role:               string;
+  allocatedPct:       number;
+  onBenchPct:         number;
+  currentAllocations: ActiveAllocation[];
 };
 
 interface Props {
   bench: BenchUser[];
-  fromDate: string;
-  toDate: string;
-  weekCount: number;
 }
 
-export function BenchClient({ bench, fromDate, toDate, weekCount }: Props) {
-  const router = useRouter();
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-  const totalFree = bench.reduce((s, u) => s + u.free, 0);
-  const fullyAvailable = bench.filter((u) => u.utilPct === 0).length;
-  const avgUtil =
-    bench.length > 0
-      ? Math.round(bench.reduce((s, u) => s + u.utilPct, 0) / bench.length)
-      : 0;
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric", month: "short", year: "numeric",
+  });
+}
 
-  function handleFromChange(val: string) {
-    const from = toMonday(val);
-    const to = toDate < from ? from : toDate;
-    router.push(`?from=${from}&to=${to}`);
-  }
+function initials(name: string | null, email: string | null): string {
+  return (name ?? email ?? "?")
+    .split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+}
 
-  function handleToChange(val: string) {
-    const to = toMonday(val);
-    const from = to < fromDate ? to : fromDate;
-    router.push(`?from=${from}&to=${to}`);
-  }
+function benchColor(pct: number): string {
+  if (pct === 100) return "var(--ok)";
+  if (pct >= 50)   return "var(--warn)";
+  return "#f97316"; // orange — partially free
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export function BenchClient({ bench }: Props) {
+  const fullyFree   = bench.filter((u) => u.onBenchPct === 100).length;
+  const partialFree = bench.filter((u) => u.onBenchPct > 0 && u.onBenchPct < 100).length;
+  const today       = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 
   return (
     <div className="page" data-screen-label="Bench">
+
+      {/* Header */}
       <div className="page-head">
         <div>
           <h1 className="page-title">Bench</h1>
-          <div className="page-sub">
-            {weekCount === 1 ? "This week" : `${weekCount} weeks`} &middot; {bench.length} engineers
-          </div>
-        </div>
-      </div>
-
-      {/* Date range filter */}
-      <div className="card" style={{ marginBottom: 20, padding: "14px 18px" }}>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 20, flexWrap: "wrap" }}>
-          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 2, minWidth: 100 }}>
-            Date range
-          </div>
-          <label className="field" style={{ margin: 0, minWidth: 160 }}>
-            <span>From</span>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => handleFromChange(e.target.value)}
-            />
-            <span style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2, display: "block" }}>
-              {fmtWeek(fromDate)}
-            </span>
-          </label>
-          <label className="field" style={{ margin: 0, minWidth: 160 }}>
-            <span>To</span>
-            <input
-              type="date"
-              value={toDate}
-              min={fromDate}
-              onChange={(e) => handleToChange(e.target.value)}
-            />
-            <span style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2, display: "block" }}>
-              {fmtWeek(toDate)}
-            </span>
-          </label>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", paddingBottom: 22 }}>
-            {weekCount} {weekCount === 1 ? "week" : "weeks"} selected
-          </div>
+          <div className="page-sub">As of {today} · {bench.length} resource{bench.length !== 1 ? "s" : ""} available</div>
         </div>
       </div>
 
       {/* KPIs */}
       <div className="kpis" style={{ marginBottom: 20 }}>
-        <div className="kpi">
-          <div className="kpi-label">Total free hours</div>
-          <div className="kpi-value">{totalFree}<span className="unit">h</span></div>
-          <div className="kpi-meta">Across {weekCount} {weekCount === 1 ? "week" : "weeks"}</div>
+        <div className="kpi ok">
+          <div className="kpi-label">Fully on bench</div>
+          <div className="kpi-value">{fullyFree}<span className="unit">people</span></div>
+          <div className="kpi-meta">100% available today</div>
+        </div>
+        <div className="kpi warn">
+          <div className="kpi-label">Partially on bench</div>
+          <div className="kpi-value">{partialFree}<span className="unit">people</span></div>
+          <div className="kpi-meta">Some capacity free today</div>
         </div>
         <div className="kpi">
-          <div className="kpi-label">Fully available</div>
-          <div className="kpi-value">{fullyAvailable}<span className="unit">engineers</span></div>
-          <div className="kpi-meta">0% allocated</div>
-        </div>
-        <div className={`kpi ${avgUtil > 90 ? "warn" : ""}`}>
-          <div className="kpi-label">Avg utilisation</div>
-          <div className="kpi-value">{avgUtil}<span className="unit">%</span></div>
-          <div className="kpi-meta">Team average</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Total engineers</div>
-          <div className="kpi-value">{bench.length}</div>
-          <div className="kpi-meta">Active</div>
+          <div className="kpi-label">Total on bench</div>
+          <div className="kpi-value">{bench.length}<span className="unit">people</span></div>
+          <div className="kpi-meta">Not fully allocated</div>
         </div>
       </div>
 
       {/* Table */}
-      <div className="card">
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              <th style={{ textAlign: "left", padding: "8px", fontWeight: 500, color: "var(--text-muted)" }}>Engineer</th>
-              <th style={{ textAlign: "right", padding: "8px", fontWeight: 500, color: "var(--text-muted)" }}>Capacity</th>
-              <th style={{ textAlign: "right", padding: "8px", fontWeight: 500, color: "var(--text-muted)" }}>Allocated</th>
-              <th style={{ textAlign: "right", padding: "8px", fontWeight: 500, color: "var(--text-muted)" }}>Free</th>
-              <th style={{ padding: "8px", fontWeight: 500, color: "var(--text-muted)" }}>Utilisation</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bench.map((u) => (
-              <tr key={u.id} style={{ borderBottom: "1px solid var(--border-faint)" }}>
-                <td style={{ padding: "10px 8px" }}>
-                  <div style={{ fontWeight: 500 }}>{u.name}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{u.role.replace(/_/g, " ")}</div>
-                </td>
-                <td style={{ padding: "10px 8px", textAlign: "right", fontFamily: "var(--mono)" }}>{u.totalCapacity}h</td>
-                <td style={{ padding: "10px 8px", textAlign: "right", fontFamily: "var(--mono)" }}>{u.allocated}h</td>
-                <td style={{ padding: "10px 8px", textAlign: "right", fontFamily: "var(--mono)", fontWeight: 600, color: u.free > 0 ? "var(--ok)" : "var(--text-muted)" }}>
-                  {u.free}h
-                </td>
-                <td style={{ padding: "10px 8px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ flex: 1, height: 6, background: "var(--surface-2)", borderRadius: 3 }}>
-                      <div style={{
-                        height: 6, borderRadius: 3,
-                        width: `${Math.min(100, u.utilPct)}%`,
-                        background: u.utilPct > 100 ? "var(--bad)" : u.utilPct >= 90 ? "var(--warn)" : "var(--ok)"
-                      }} />
-                    </div>
-                    <span style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--text-secondary)", minWidth: 36 }}>
-                      {u.utilPct}%
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {bench.length === 0 && (
-              <tr>
-                <td colSpan={5} style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>
-                  No engineers found
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div className="card" style={{ overflow: "hidden", padding: 0 }}>
+        {bench.length === 0 ? (
+          <div style={{ padding: 48, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>
+            Everyone is fully allocated today.
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
+                  <th style={{ textAlign: "left",   padding: "10px 16px", fontWeight: 500, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-muted)", width: "22%" }}>Resource</th>
+                  <th style={{ textAlign: "center", padding: "10px 16px", fontWeight: 500, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-muted)", width: "18%" }}>On Bench</th>
+                  <th style={{ textAlign: "left",   padding: "10px 16px", fontWeight: 500, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-muted)"          }}>Current Allocations</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bench.map((u, i) => (
+                  <tr
+                    key={u.id}
+                    style={{ borderBottom: i < bench.length - 1 ? "1px solid var(--border)" : "none" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "var(--surface-2)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = ""; }}
+                  >
+                    {/* Resource */}
+                    <td style={{ padding: "14px 16px", verticalAlign: "middle" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span className="avatar" style={{ flexShrink: 0 }}>{initials(u.name, u.email)}</span>
+                        <div>
+                          <div style={{ fontWeight: 500 }}>{u.name ?? u.email}</div>
+                          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
+                            {u.role.replace(/_/g, " ")} · {u.capacity}h/wk
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* On Bench % */}
+                    <td style={{ padding: "14px 16px", verticalAlign: "middle", textAlign: "center" }}>
+                      <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 5, minWidth: 90 }}>
+                        <span style={{
+                          fontSize: 20, fontWeight: 700,
+                          color: benchColor(u.onBenchPct),
+                        }}>
+                          {u.onBenchPct}%
+                        </span>
+                        {/* Bar */}
+                        <div style={{ width: 90, height: 5, background: "var(--surface-2)", borderRadius: 3 }}>
+                          <div style={{
+                            height: 5, borderRadius: 3,
+                            width: `${u.onBenchPct}%`,
+                            background: benchColor(u.onBenchPct),
+                          }} />
+                        </div>
+                        <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
+                          {u.onBenchPct === 100 ? "Fully free" : `${u.allocatedPct}% allocated`}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Current Allocations */}
+                    <td style={{ padding: "14px 16px", verticalAlign: "middle" }}>
+                      {u.currentAllocations.length === 0 ? (
+                        <span style={{ fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>No active allocations</span>
+                      ) : (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          {u.currentAllocations.map((a) => (
+                            <div
+                              key={a.projectId + a.endDate}
+                              style={{
+                                display:      "inline-flex",
+                                alignItems:   "center",
+                                gap:          6,
+                                padding:      "4px 10px",
+                                borderRadius: 20,
+                                background:   "var(--surface-2)",
+                                border:       "1px solid var(--border)",
+                                fontSize:     12,
+                                whiteSpace:   "nowrap",
+                              }}
+                            >
+                              <span style={{ width: 8, height: 8, borderRadius: "50%", background: a.projectColor, flexShrink: 0 }} />
+                              <span style={{ fontWeight: 500 }}>{a.projectName}</span>
+                              <span style={{ color: "var(--text-muted)" }}>·</span>
+                              <span style={{ color: "var(--text-muted)" }}>{a.pct}%</span>
+                              <span style={{ color: "var(--text-muted)" }}>·</span>
+                              <span style={{ color: "var(--text-muted)" }}>ends {fmtDate(a.endDate)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Legend */}
+      <div style={{ display: "flex", gap: 20, marginTop: 12, fontSize: 12, color: "var(--text-muted)" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--ok)", display: "inline-block" }} />
+          100% free
+        </span>
+        <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--warn)", display: "inline-block" }} />
+          50–99% free
+        </span>
+        <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#f97316", display: "inline-block" }} />
+          1–49% free
+        </span>
       </div>
     </div>
   );
-}
-
-// Helpers (client-side, no import needed)
-function toMonday(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  return d.toISOString().slice(0, 10);
-}
-
-function fmtWeek(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  const fri = new Date(d);
-  fri.setDate(fri.getDate() + 4);
-  const fmt = (x: Date) => x.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-  return `${fmt(d)} - ${fmt(fri)}`;
 }
