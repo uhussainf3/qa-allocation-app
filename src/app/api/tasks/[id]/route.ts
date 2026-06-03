@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { ok, err, unauthorized, notFound } from "@/lib/apiResponse";
 import { revalidateTag } from "next/cache";
 
-const EDITABLE_ROLES = ["ADMIN", "PROJECT_MANAGER"];
+const EDITABLE_ROLES = ["ADMIN", "DIVISION_OWNER", "PROJECT_MANAGER"];
 
 // PATCH /api/tasks/[id]  — update a task (any field)
 export async function PATCH(

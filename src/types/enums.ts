@@ -1,4 +1,5 @@
-export type Role = "ADMIN" | "PROJECT_MANAGER" | "MANAGEMENT" | "QA_ENGINEER";
+export type Role = "ADMIN" | "EXECUTIVE" | "DIVISION_OWNER" | "PROJECT_MANAGER" | "MEMBER";
+export type JobTitle = "DEVELOPER" | "QA_ENGINEER" | "FUNCTIONAL_CONSULTANT" | "SUPPORT_ENGINEER" | "PROJECT_MANAGER" | "PRODUCT_MANAGER";
 export type ProjectStatus = "ACTIVE" | "ON_HOLD" | "COMPLETED" | "CANCELLED";
 export type HoursLogStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
 export type TimesheetStatus = "PENDING" | "SUBMITTED" | "APPROVED" | "REJECTED" | "FLAGGED";

@@ -23,18 +23,16 @@ export default auth((req) => {
 
   const role = req.auth.user?.role;
 
-  // Admin-only routes
-  if (pathname.startsWith("/admin") && role !== "ADMIN") {
+  // Admin-only pages
+  if (
+    (pathname.startsWith("/divisions") || pathname.startsWith("/team") || pathname.startsWith("/import") || pathname.startsWith("/settings")) &&
+    role !== "ADMIN"
+  ) {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
-  // Management + Admin dashboards only
-  if (
-    pathname.startsWith("/dashboard") &&
-    role !== "ADMIN" &&
-    role !== "MANAGEMENT" &&
-    role !== "PROJECT_MANAGER"
-  ) {
+  // Executive Dashboard — ADMIN + EXECUTIVE only
+  if (pathname.startsWith("/dashboard") && role !== "ADMIN" && role !== "EXECUTIVE") {
     return NextResponse.redirect(new URL("/", req.url));
   }
 

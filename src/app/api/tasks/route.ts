@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { ok, err, unauthorized } from "@/lib/apiResponse";
 import { revalidateTag } from "next/cache";
 
-const EDITABLE_ROLES = ["ADMIN", "PROJECT_MANAGER"];
+const EDITABLE_ROLES = ["ADMIN", "DIVISION_OWNER", "PROJECT_MANAGER"];
 
 // GET /api/tasks?projectId=xxx  — list all tasks (+ subtasks) for a project
 export async function GET(req: Request) {

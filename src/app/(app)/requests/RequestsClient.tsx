@@ -86,7 +86,7 @@ export function RequestsClient({ requests, projects, users, canReview }: Props) 
                   style={{ fontSize: 12, padding: "4px 8px", border: "1px solid var(--border)", borderRadius: 4 }}
                 >
                   <option value="">Assign to…</option>
-                  {users.filter((u) => u.role === "QA_ENGINEER").map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
                 </select>
                 <button className="btn sm" style={{ color: "var(--ok)" }} onClick={() => handleReview(r.id, "approve")}>Approve</button>
                 <button className="btn sm" style={{ color: "var(--bad)" }} onClick={() => handleReview(r.id, "decline")}>Decline</button>

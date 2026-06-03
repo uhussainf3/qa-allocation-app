@@ -252,6 +252,40 @@ export const getCachedPublicHolidays = unstable_cache(
   { revalidate: TTL, tags: ["holidays"] }
 );
 
+// ─── Divisions ────────────────────────────────────────────────────────────────
+
+/** All divisions with owner + member/project counts. */
+export const getCachedDivisions = unstable_cache(
+  async () =>
+    prisma.division.findMany({
+      include: {
+        owner:  { select: { id: true, name: true, email: true } },
+        _count: { select: { members: true, projects: true } },
+      },
+      orderBy: { name: "asc" },
+    }),
+  ["divisions"],
+  { revalidate: TTL, tags: ["divisions"] }
+);
+
+// ─── Team (all users with division) ───────────────────────────────────────────
+
+/** All users (active + inactive) with division info — for Team page. */
+export const getCachedAllUsers = unstable_cache(
+  async () =>
+    prisma.user.findMany({
+      select: {
+        id: true, name: true, email: true, image: true,
+        role: true, jobTitle: true, capacity: true,
+        department: true, isActive: true, divisionId: true, createdAt: true,
+        division: { select: { id: true, name: true, code: true, color: true } },
+      },
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
+    }),
+  ["all-users"],
+  { revalidate: TTL, tags: ["users"] }
+);
+
 // ─── Leaves ───────────────────────────────────────────────────────────────────
 
 /** Approved leaves overlapping a range (for Capacity page). Dates as ISO strings. */

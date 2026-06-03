@@ -5,7 +5,7 @@ import type { Role } from "@/types/enums";
 
 export default async function LeavePage() {
   const session = await auth();
-  const canSeeAll = ["ADMIN", "PROJECT_MANAGER", "MANAGEMENT"].includes(session!.user.role);
+  const canSeeAll = ["ADMIN", "EXECUTIVE", "DIVISION_OWNER", "PROJECT_MANAGER"].includes(session!.user.role);
 
   const leaves = await prisma.leave.findMany({
     where: canSeeAll ? {} : { userId: session!.user.id },

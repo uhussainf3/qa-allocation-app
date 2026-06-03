@@ -15,7 +15,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const session = await auth();
   if (!session) return unauthorized();
   const role = session.user.role;
-  if (role !== "ADMIN" && role !== "PROJECT_MANAGER") return err("Forbidden", 403);
+  if (!["ADMIN", "DIVISION_OWNER", "PROJECT_MANAGER"].includes(role)) return err("Forbidden", 403);
 
   const { id } = await params;
   const body   = await req.json();
@@ -54,7 +54,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const session = await auth();
   if (!session) return unauthorized();
   const role = session.user.role;
-  if (role !== "ADMIN" && role !== "PROJECT_MANAGER") return err("Forbidden", 403);
+  if (!["ADMIN", "DIVISION_OWNER", "PROJECT_MANAGER"].includes(role)) return err("Forbidden", 403);
 
   const { id } = await params;
   const existing = await prisma.allocation.findUnique({ where: { id } });

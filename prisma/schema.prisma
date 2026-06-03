@@ -44,7 +44,8 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-// User — role is one of: ADMIN | PROJECT_MANAGER | MANAGEMENT | QA_ENGINEER
+// User — role: ADMIN | EXECUTIVE | DIVISION_OWNER | PROJECT_MANAGER | MEMBER
+//        jobTitle: DEVELOPER | QA_ENGINEER | FUNCTIONAL_CONSULTANT | SUPPORT_ENGINEER | PROJECT_MANAGER | PRODUCT_MANAGER
 
 model User {
   id            String    @id @default(cuid())
@@ -52,13 +53,17 @@ model User {
   email         String?   @unique
   emailVerified DateTime?
   image         String?
-  role          String    @default("QA_ENGINEER")
+  role          String    @default("MEMBER")
+  jobTitle      String?   // DEVELOPER | QA_ENGINEER | FUNCTIONAL_CONSULTANT | SUPPORT_ENGINEER | PROJECT_MANAGER | PRODUCT_MANAGER
   isActive      Boolean   @default(true)
   capacity      Int       @default(40)
   department    String?
+  divisionId    String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  division                 Division?         @relation("DivisionMembers", fields: [divisionId], references: [id])
+  ownedDivisions           Division[]        @relation("DivisionOwner")
   accounts                 Account[]
   sessions                 Session[]
   allocations              Allocation[]
@@ -71,6 +76,24 @@ model User {
   resourceRequestsAssigned ResourceRequest[] @relation("RequestAssignedTo")
   timesheets               Timesheet[]
   assignedTasks            Task[]            @relation("AssignedTasks")
+}
+
+// Division — top-level organisational unit (e.g. NetSuite, App Dev, ML/AI)
+
+model Division {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique   // e.g. "NS", "AD", "ML"
+  color       String   @default("#6366f1")
+  description String?
+  ownerId     String?            // Division Owner (User)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner    User?     @relation("DivisionOwner", fields: [ownerId], references: [id])
+  projects Project[]
+  members  User[]    @relation("DivisionMembers")
 }
 
 // Project — status: ACTIVE | ON_HOLD | COMPLETED | CANCELLED
@@ -86,9 +109,11 @@ model Project {
   startDate       DateTime?
   endDate         DateTime?
   color           String   @default("#6366f1")
+  divisionId      String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  division         Division?         @relation(fields: [divisionId], references: [id])
   tasks            Task[]
   allocations      Allocation[]
   hoursLogs        HoursLog[]

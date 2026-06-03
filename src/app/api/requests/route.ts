@@ -27,7 +27,7 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
-  const canSeeAll = ["ADMIN", "PROJECT_MANAGER", "MANAGEMENT"].includes(session.user.role);
+  const canSeeAll = ["ADMIN", "EXECUTIVE", "DIVISION_OWNER", "PROJECT_MANAGER"].includes(session.user.role);
 
   const requests = await prisma.resourceRequest.findMany({
     where: {

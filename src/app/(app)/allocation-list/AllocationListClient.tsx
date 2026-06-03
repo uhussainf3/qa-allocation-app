@@ -83,7 +83,7 @@ function initials(name: string | null, email: string | null): string {
 type StatusFilter = "active" | "upcoming" | "expired" | "all";
 
 export function AllocationListClient({ allocations, currentUserRole }: Props) {
-  const canEdit = currentUserRole === "ADMIN" || currentUserRole === "PROJECT_MANAGER";
+  const canEdit = ["ADMIN", "DIVISION_OWNER", "PROJECT_MANAGER"].includes(currentUserRole);
 
   const [search,         setSearch]         = useState("");
   const [projectFilter,  setProjectFilter]  = useState("all");

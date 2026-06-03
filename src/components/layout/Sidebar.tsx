@@ -10,44 +10,53 @@ type NavGroup = { group: string; items: NavItem[]; roles?: Role[] };
 
 const NAV: NavGroup[] = [
   {
+    group: "Overview",
+    items: [
+      { href: "/dashboard", label: "Executive Dashboard" },
+    ],
+    roles: ["ADMIN", "EXECUTIVE"],
+  },
+  {
     group: "Plan",
     items: [
-      { href: "/allocations",     label: "Allocations"       },
-      { href: "/allocation-list", label: "Manage Allocations" },
-      { href: "/pipeline",        label: "Pipeline"           },
-      { href: "/capacity",        label: "Capacity"           },
-      { href: "/forecast",        label: "Forecast"           },
-      { href: "/leave",           label: "Leave"              },
+      { href: "/allocations",     label: "Allocations"        },
+      { href: "/allocation-list", label: "Manage Allocations"  },
+      { href: "/pipeline",        label: "Pipeline"            },
+      { href: "/capacity",        label: "Capacity"            },
+      { href: "/forecast",        label: "Forecast"            },
+      { href: "/leave",           label: "Leave"               },
     ],
   },
   {
     group: "Work",
     items: [
-      { href: "/projects", label: "Projects" },
-      { href: "/tasks",    label: "My Tasks"  },
-      { href: "/hours", label: "Hours log" },
-      { href: "/timesheets", label: "Timesheets" },
-      { href: "/requests", label: "Requests" },
+      { href: "/projects",    label: "Projects"    },
+      { href: "/tasks",       label: "My Tasks"    },
+      { href: "/hours",       label: "Hours log"   },
+      { href: "/timesheets",  label: "Timesheets"  },
+      { href: "/requests",    label: "Requests"    },
     ],
   },
   {
     group: "Insights",
     items: [
-      { href: "/conflicts", label: "Conflicts" },
-      { href: "/bench", label: "Bench" },
-      { href: "/skills", label: "Skill matrix" },
-      { href: "/audit", label: "Activity log" },
+      { href: "/conflicts", label: "Conflicts"    },
+      { href: "/bench",     label: "Bench"        },
+      { href: "/skills",    label: "Skill matrix" },
+      { href: "/audit",     label: "Activity log" },
     ],
-    roles: ["ADMIN", "PROJECT_MANAGER", "MANAGEMENT"],
+    roles: ["ADMIN", "EXECUTIVE", "DIVISION_OWNER", "PROJECT_MANAGER"],
   },
   {
     group: "Admin",
     items: [
-      { href: "/import",         label: "Import"         },
-      { href: "/notifications",  label: "Notifications"  },
-      { href: "/settings",       label: "Settings"       },
+      { href: "/divisions",    label: "Divisions"     },
+      { href: "/team",         label: "Team"          },
+      { href: "/import",       label: "Import"        },
+      { href: "/notifications", label: "Notifications" },
+      { href: "/settings",     label: "Settings"      },
     ],
-    roles: ["ADMIN", "PROJECT_MANAGER"],
+    roles: ["ADMIN"],
   },
 ];
 
@@ -72,17 +81,18 @@ export function Sidebar({ user }: Props) {
     .toUpperCase();
 
   const roleLabel: Record<Role, string> = {
-    ADMIN: "Admin",
-    PROJECT_MANAGER: "Project Manager",
-    MANAGEMENT: "Management",
-    QA_ENGINEER: "QA Engineer",
+    ADMIN:          "Admin",
+    EXECUTIVE:      "Executive",
+    DIVISION_OWNER: "Division Owner",
+    PROJECT_MANAGER:"Project Manager",
+    MEMBER:         "Member",
   };
 
   return (
     <aside className="sidebar">
       <div className="brand">
         <span className="brand-mark" />
-        <span>QA Allocation</span>
+        <span>Folio3 Allocation</span>
       </div>
 
       <nav className="side-nav">
@@ -109,7 +119,7 @@ export function Sidebar({ user }: Props) {
         <div>
           <div style={{ fontSize: 12.5, fontWeight: 500 }}>{user.name}</div>
           <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
-            {roleLabel[user.role]}
+            {roleLabel[user.role] ?? user.role}
           </div>
         </div>
         <button

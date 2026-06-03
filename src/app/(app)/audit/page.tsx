@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 export default async function AuditPage() {
   const session = await auth();
-  if (!["ADMIN", "PROJECT_MANAGER", "MANAGEMENT"].includes(session!.user.role)) {
+  if (!["ADMIN", "EXECUTIVE", "DIVISION_OWNER", "PROJECT_MANAGER"].includes(session!.user.role)) {
     return <div className="page"><p style={{ padding: 40, color: "var(--text-muted)" }}>Access restricted.</p></div>;
   }
 
