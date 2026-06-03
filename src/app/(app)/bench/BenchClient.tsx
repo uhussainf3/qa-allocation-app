@@ -47,9 +47,12 @@ function benchColor(pct: number): string {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function BenchClient({ bench }: Props) {
-  const fullyFree   = bench.filter((u) => u.onBenchPct === 100).length;
-  const partialFree = bench.filter((u) => u.onBenchPct > 0 && u.onBenchPct < 100).length;
-  const today       = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  const fullyFree      = bench.filter((u) => u.onBenchPct === 100).length;
+  const partialFree    = bench.filter((u) => u.onBenchPct > 0 && u.onBenchPct < 100).length;
+  const totalFreeHours = Math.round(
+    bench.reduce((s, u) => s + (u.capacity / 5) * (u.onBenchPct / 100), 0) * 10
+  ) / 10;
+  const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 
   return (
     <div className="page" data-screen-label="Bench">
@@ -78,6 +81,11 @@ export function BenchClient({ bench }: Props) {
           <div className="kpi-label">Total on bench</div>
           <div className="kpi-value">{bench.length}<span className="unit">people</span></div>
           <div className="kpi-meta">Not fully allocated</div>
+        </div>
+        <div className="kpi ok">
+          <div className="kpi-label">Total free capacity</div>
+          <div className="kpi-value">{totalFreeHours}<span className="unit">h / day</span></div>
+          <div className="kpi-meta">Available across bench today</div>
         </div>
       </div>
 

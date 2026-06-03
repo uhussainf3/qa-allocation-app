@@ -85,9 +85,10 @@ type StatusFilter = "active" | "upcoming" | "expired" | "all";
 export function AllocationListClient({ allocations, currentUserRole }: Props) {
   const canEdit = currentUserRole === "ADMIN" || currentUserRole === "PROJECT_MANAGER";
 
-  const [search,        setSearch]        = useState("");
-  const [projectFilter, setProjectFilter] = useState("all");
-  const [statusFilter,  setStatusFilter]  = useState<StatusFilter>("active");
+  const [search,         setSearch]         = useState("");
+  const [projectFilter,  setProjectFilter]  = useState("all");
+  const [resourceFilter, setResourceFilter] = useState("all");
+  const [statusFilter,   setStatusFilter]   = useState<StatusFilter>("active");
   const [editState,     setEditState]     = useState<EditState | null>(null);
   const [saving,        setSaving]        = useState(false);
   const [deleteId,      setDeleteId]      = useState<string | null>(null);
@@ -100,6 +101,15 @@ export function AllocationListClient({ allocations, currentUserRole }: Props) {
     for (const a of allocations) {
       if (!seen.has(a.project.id))
         seen.set(a.project.id, { id: a.project.id, name: a.project.name, code: a.project.code });
+    }
+    return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [allocations]);
+
+  const resources = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string }>();
+    for (const a of allocations) {
+      if (!seen.has(a.user.id))
+        seen.set(a.user.id, { id: a.user.id, name: a.user.name ?? a.user.email ?? "Unknown" });
     }
     return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [allocations]);
@@ -122,6 +132,9 @@ export function AllocationListClient({ allocations, currentUserRole }: Props) {
       if (statusFilter === "upcoming" && !(start > todayStr))                     return false;
       if (statusFilter === "expired"  && !(end   < todayStr))                     return false;
 
+      // Resource filter
+      if (resourceFilter !== "all" && a.user.id !== resourceFilter) return false;
+
       // Project filter
       if (projectFilter !== "all" && a.project.id !== projectFilter) return false;
 
@@ -135,7 +148,26 @@ export function AllocationListClient({ allocations, currentUserRole }: Props) {
 
       return true;
     });
-  }, [allocations, search, projectFilter, statusFilter, todayStr]);
+  }, [allocations, search, projectFilter, resourceFilter, statusFilter, todayStr]);
+
+  // Summary for selected resource — only meaningful when one resource is chosen
+  const resourceSummary = useMemo(() => {
+    if (resourceFilter === "all") return null;
+    const user = resources.find((r) => r.id === resourceFilter);
+    if (!user) return null;
+    // Use active allocations only for the summary
+    const active = allocations.filter(
+      (a) => a.user.id === resourceFilter &&
+             a.startDate.slice(0, 10) <= todayStr &&
+             a.endDate.slice(0, 10)   >= todayStr
+    );
+    const capacity    = allocations.find((a) => a.user.id === resourceFilter)?.user.capacity ?? 40;
+    const dailyCap    = capacity / 5;
+    const allocatedH  = active.reduce((s, a) => s + a.hoursPerDay, 0);
+    const allocatedPct = dailyCap > 0 ? Math.min(100, Math.round((allocatedH / dailyCap) * 100)) : 0;
+    const freePct     = Math.max(0, 100 - allocatedPct);
+    return { name: user.name, allocatedPct, freePct, activeCount: active.length };
+  }, [resourceFilter, allocations, resources, todayStr]);
 
   function openEdit(a: Allocation) {
     setEditState({
@@ -277,6 +309,16 @@ export function AllocationListClient({ allocations, currentUserRole }: Props) {
         </div>
         <select
           className="select-sm"
+          value={resourceFilter}
+          onChange={(e) => setResourceFilter(e.target.value)}
+        >
+          <option value="all">All resources</option>
+          {resources.map((r) => (
+            <option key={r.id} value={r.id}>{r.name}</option>
+          ))}
+        </select>
+        <select
+          className="select-sm"
           value={projectFilter}
           onChange={(e) => setProjectFilter(e.target.value)}
         >
@@ -288,6 +330,35 @@ export function AllocationListClient({ allocations, currentUserRole }: Props) {
           ))}
         </select>
       </div>
+
+      {/* Resource summary tile — shown only when a specific resource is selected */}
+      {resourceSummary && (
+        <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+          <div className="card" style={{ flex: "0 0 auto", padding: "14px 24px", display: "flex", flexDirection: "column", alignItems: "center", minWidth: 130 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Allocated today</div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: resourceSummary.allocatedPct >= 100 ? "var(--bad)" : resourceSummary.allocatedPct >= 80 ? "var(--warn)" : "var(--ok)" }}>
+              {resourceSummary.allocatedPct}%
+            </div>
+            <div style={{ marginTop: 6, width: 100, height: 5, background: "var(--surface-2)", borderRadius: 3 }}>
+              <div style={{ height: 5, borderRadius: 3, width: `${Math.min(100, resourceSummary.allocatedPct)}%`, background: resourceSummary.allocatedPct >= 100 ? "var(--bad)" : resourceSummary.allocatedPct >= 80 ? "var(--warn)" : "var(--ok)" }} />
+            </div>
+          </div>
+          <div className="card" style={{ flex: "0 0 auto", padding: "14px 24px", display: "flex", flexDirection: "column", alignItems: "center", minWidth: 130 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Free today</div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: resourceSummary.freePct === 0 ? "var(--text-muted)" : "var(--ok)" }}>
+              {resourceSummary.freePct}%
+            </div>
+            <div style={{ marginTop: 6, width: 100, height: 5, background: "var(--surface-2)", borderRadius: 3 }}>
+              <div style={{ height: 5, borderRadius: 3, width: `${resourceSummary.freePct}%`, background: "var(--ok)" }} />
+            </div>
+          </div>
+          <div className="card" style={{ flex: "0 0 auto", padding: "14px 24px", display: "flex", flexDirection: "column", alignItems: "center", minWidth: 130 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Active allocations</div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: "var(--text)" }}>{resourceSummary.activeCount}</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>running today</div>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="card" style={{ overflow: "hidden" }}>
