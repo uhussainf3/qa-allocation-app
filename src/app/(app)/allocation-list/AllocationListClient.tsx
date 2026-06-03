@@ -96,23 +96,31 @@ export function AllocationListClient({ allocations, currentUserRole }: Props) {
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
+  // Projects list — narrowed to those the selected resource is allocated to
   const projects = useMemo(() => {
+    const source = resourceFilter === "all"
+      ? allocations
+      : allocations.filter((a) => a.user.id === resourceFilter);
     const seen = new Map<string, { id: string; name: string; code: string }>();
-    for (const a of allocations) {
+    for (const a of source) {
       if (!seen.has(a.project.id))
         seen.set(a.project.id, { id: a.project.id, name: a.project.name, code: a.project.code });
     }
     return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [allocations]);
+  }, [allocations, resourceFilter]);
 
+  // Resources list — narrowed to those allocated on the selected project
   const resources = useMemo(() => {
+    const source = projectFilter === "all"
+      ? allocations
+      : allocations.filter((a) => a.project.id === projectFilter);
     const seen = new Map<string, { id: string; name: string }>();
-    for (const a of allocations) {
+    for (const a of source) {
       if (!seen.has(a.user.id))
         seen.set(a.user.id, { id: a.user.id, name: a.user.name ?? a.user.email ?? "Unknown" });
     }
     return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [allocations]);
+  }, [allocations, projectFilter]);
 
   // Tab counts — computed once from full list
   const counts = useMemo(() => ({
@@ -150,24 +158,67 @@ export function AllocationListClient({ allocations, currentUserRole }: Props) {
     });
   }, [allocations, search, projectFilter, resourceFilter, statusFilter, todayStr]);
 
-  // Summary for selected resource — only meaningful when one resource is chosen
+  // ── Resource summary (when one resource selected, no project) ────────────────
   const resourceSummary = useMemo(() => {
     if (resourceFilter === "all") return null;
-    const user = resources.find((r) => r.id === resourceFilter);
+    const user = allocations.find((a) => a.user.id === resourceFilter)?.user;
     if (!user) return null;
-    // Use active allocations only for the summary
     const active = allocations.filter(
       (a) => a.user.id === resourceFilter &&
              a.startDate.slice(0, 10) <= todayStr &&
              a.endDate.slice(0, 10)   >= todayStr
     );
-    const capacity    = allocations.find((a) => a.user.id === resourceFilter)?.user.capacity ?? 40;
-    const dailyCap    = capacity / 5;
-    const allocatedH  = active.reduce((s, a) => s + a.hoursPerDay, 0);
+    const dailyCap     = user.capacity / 5;
+    const allocatedH   = active.reduce((s, a) => s + a.hoursPerDay, 0);
     const allocatedPct = dailyCap > 0 ? Math.min(100, Math.round((allocatedH / dailyCap) * 100)) : 0;
-    const freePct     = Math.max(0, 100 - allocatedPct);
-    return { name: user.name, allocatedPct, freePct, activeCount: active.length };
-  }, [resourceFilter, allocations, resources, todayStr]);
+    const freePct      = Math.max(0, 100 - allocatedPct);
+    return { name: user.name ?? user.email, allocatedPct, freePct, activeCount: active.length };
+  }, [resourceFilter, allocations, todayStr]);
+
+  // ── Project summary (when one project selected, no resource) ─────────────────
+  const projectSummary = useMemo(() => {
+    if (projectFilter === "all" || resourceFilter !== "all") return null;
+    const proj = allocations.find((a) => a.project.id === projectFilter)?.project;
+    if (!proj) return null;
+
+    const allForProject    = allocations.filter((a) => a.project.id === projectFilter);
+    const activeForProject = allForProject.filter(
+      (a) => a.startDate.slice(0, 10) <= todayStr && a.endDate.slice(0, 10) >= todayStr
+    );
+
+    // Tile 1 — unique active people per role
+    const roleCount: Record<string, Set<string>> = {};
+    for (const a of activeForProject) {
+      const role = a.user.role.replace(/_/g, " ");
+      if (!roleCount[role]) roleCount[role] = new Set();
+      roleCount[role].add(a.user.id);
+    }
+    const byRoleCount = Object.entries(roleCount)
+      .map(([role, ids]) => ({ role, count: ids.size }))
+      .sort((a, b) => b.count - a.count);
+
+    // Tile 4 — sum of allocation % per role (active allocations)
+    const rolePct: Record<string, number> = {};
+    for (const a of activeForProject) {
+      const role     = a.user.role.replace(/_/g, " ");
+      const dailyCap = a.user.capacity / 5;
+      const pct      = dailyCap > 0 ? Math.round((a.hoursPerDay / dailyCap) * 100) : 0;
+      rolePct[role]  = (rolePct[role] ?? 0) + pct;
+    }
+    const byRolePct = Object.entries(rolePct)
+      .map(([role, pct]) => ({ role, pct }))
+      .sort((a, b) => b.pct - a.pct);
+
+    return {
+      projectName:      proj.name,
+      projectColor:     proj.color,
+      activeCount:      activeForProject.length,
+      totalCount:       allForProject.length,
+      uniqueActive:     new Set(activeForProject.map((a) => a.user.id)).size,
+      byRoleCount,
+      byRolePct,
+    };
+  }, [projectFilter, resourceFilter, allocations, todayStr]);
 
   function openEdit(a: Allocation) {
     setEditState({
@@ -331,32 +382,92 @@ export function AllocationListClient({ allocations, currentUserRole }: Props) {
         </select>
       </div>
 
-      {/* Resource summary tile — shown only when a specific resource is selected */}
+      {/* ── Resource summary — shown when a specific resource is selected ── */}
       {resourceSummary && (
         <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-          <div className="card" style={{ flex: "0 0 auto", padding: "14px 24px", display: "flex", flexDirection: "column", alignItems: "center", minWidth: 130 }}>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Allocated today</div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: resourceSummary.allocatedPct >= 100 ? "var(--bad)" : resourceSummary.allocatedPct >= 80 ? "var(--warn)" : "var(--ok)" }}>
-              {resourceSummary.allocatedPct}%
+          {[
+            {
+              label: "Allocated today",
+              value: `${resourceSummary.allocatedPct}%`,
+              color: resourceSummary.allocatedPct >= 100 ? "var(--bad)" : resourceSummary.allocatedPct >= 80 ? "var(--warn)" : "var(--ok)",
+              bar: resourceSummary.allocatedPct,
+            },
+            {
+              label: "Free today",
+              value: `${resourceSummary.freePct}%`,
+              color: resourceSummary.freePct === 0 ? "var(--text-muted)" : "var(--ok)",
+              bar: resourceSummary.freePct,
+            },
+            {
+              label: "Active allocations",
+              value: String(resourceSummary.activeCount),
+              color: "var(--text)",
+              sub: "running today",
+            },
+          ].map((tile) => (
+            <div key={tile.label} className="card" style={{ flex: "0 0 auto", padding: "14px 24px", display: "flex", flexDirection: "column", alignItems: "center", minWidth: 130 }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>{tile.label}</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: tile.color }}>{tile.value}</div>
+              {tile.bar !== undefined && (
+                <div style={{ marginTop: 6, width: 100, height: 5, background: "var(--surface-2)", borderRadius: 3 }}>
+                  <div style={{ height: 5, borderRadius: 3, width: `${Math.min(100, tile.bar)}%`, background: tile.color }} />
+                </div>
+              )}
+              {tile.sub && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>{tile.sub}</div>}
             </div>
-            <div style={{ marginTop: 6, width: 100, height: 5, background: "var(--surface-2)", borderRadius: 3 }}>
-              <div style={{ height: 5, borderRadius: 3, width: `${Math.min(100, resourceSummary.allocatedPct)}%`, background: resourceSummary.allocatedPct >= 100 ? "var(--bad)" : resourceSummary.allocatedPct >= 80 ? "var(--warn)" : "var(--ok)" }} />
-            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Project summary — shown when a specific project is selected (no resource) ── */}
+      {projectSummary && (
+        <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "stretch" }}>
+
+          {/* Tile 1 — Resources by role (count) */}
+          <div className="card" style={{ flex: "0 0 auto", padding: "14px 20px", minWidth: 160 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>Resources by role</div>
+            {projectSummary.byRoleCount.length === 0 ? (
+              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>None active today</div>
+            ) : projectSummary.byRoleCount.map(({ role, count }) => (
+              <div key={role} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 4 }}>
+                <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{role}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>{count}</span>
+              </div>
+            ))}
           </div>
+
+          {/* Tile 2 — Active allocations */}
           <div className="card" style={{ flex: "0 0 auto", padding: "14px 24px", display: "flex", flexDirection: "column", alignItems: "center", minWidth: 130 }}>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Free today</div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: resourceSummary.freePct === 0 ? "var(--text-muted)" : "var(--ok)" }}>
-              {resourceSummary.freePct}%
-            </div>
-            <div style={{ marginTop: 6, width: 100, height: 5, background: "var(--surface-2)", borderRadius: 3 }}>
-              <div style={{ height: 5, borderRadius: 3, width: `${resourceSummary.freePct}%`, background: "var(--ok)" }} />
-            </div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Active today</div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: "var(--ok)" }}>{projectSummary.activeCount}</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>{projectSummary.uniqueActive} unique people</div>
           </div>
+
+          {/* Tile 3 — Total allocations */}
           <div className="card" style={{ flex: "0 0 auto", padding: "14px 24px", display: "flex", flexDirection: "column", alignItems: "center", minWidth: 130 }}>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Active allocations</div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: "var(--text)" }}>{resourceSummary.activeCount}</div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>running today</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Total allocations</div>
+            <div style={{ fontSize: 28, fontWeight: 700, color: "var(--text)" }}>{projectSummary.totalCount}</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>all time</div>
           </div>
+
+          {/* Tile 4 — Sum of allocation % per role */}
+          <div className="card" style={{ flex: "0 0 auto", padding: "14px 20px", minWidth: 180 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>Allocation % by role</div>
+            {projectSummary.byRolePct.length === 0 ? (
+              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>None active today</div>
+            ) : projectSummary.byRolePct.map(({ role, pct }) => (
+              <div key={role} style={{ marginBottom: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                  <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{role}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: pct > 100 ? "var(--bad)" : "var(--text)" }}>{pct}%</span>
+                </div>
+                <div style={{ height: 4, background: "var(--surface-2)", borderRadius: 2 }}>
+                  <div style={{ height: 4, borderRadius: 2, width: `${Math.min(100, pct)}%`, background: pct > 100 ? "var(--bad)" : "var(--accent)" }} />
+                </div>
+              </div>
+            ))}
+          </div>
+
         </div>
       )}
 
