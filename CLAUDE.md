@@ -1,2 +1,3 @@
 @AGENTS.md
 @CODEBASE_RULES.md
+@SCOPE.md
