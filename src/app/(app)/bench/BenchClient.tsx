@@ -18,6 +18,7 @@ type BenchUser = {
   email:              string | null;
   capacity:           number;
   role:               string;
+  jobTitle:           string | null;
   divisionId:         string | null;
   allocatedPct:       number;
   onBenchPct:         number;
@@ -139,7 +140,7 @@ export function BenchClient({ bench, divisions }: Props) {
                         <div>
                           <div style={{ fontWeight: 500 }}>{u.name ?? u.email}</div>
                           <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
-                            {u.role.replace(/_/g, " ")} · {u.capacity}h/wk
+                            {u.jobTitle ?? u.role.replace(/_/g, " ")} · {u.capacity}h/wk
                           </div>
                         </div>
                       </div>

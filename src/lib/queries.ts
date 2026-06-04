@@ -38,7 +38,7 @@ export const getCachedSimpleUsers = unstable_cache(
         isActive: true,
         OR: [{ jobTitle: null }, { jobTitle: { not: "VP" } }],
       },
-      select: { id: true, name: true, email: true, capacity: true, role: true, divisionId: true },
+      select: { id: true, name: true, email: true, capacity: true, role: true, jobTitle: true, divisionId: true },
       orderBy: { name: "asc" },
     }),
   ["simple-users"],
