@@ -1,1 +1,2 @@
 @AGENTS.md
+@CODEBASE_RULES.md
