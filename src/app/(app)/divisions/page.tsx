@@ -16,11 +16,7 @@ export default async function DivisionsPage() {
 
   return (
     <DivisionsClient
-      divisions={divisions.map((d) => ({
-        ...d,
-        createdAt: d.createdAt.toISOString(),
-        updatedAt: d.updatedAt.toISOString(),
-      }))}
+      divisions={divisions}
       users={users.filter((u) => u.isActive)}
     />
   );

@@ -16,10 +16,7 @@ export default async function TeamPage() {
 
   return (
     <TeamClient
-      users={users.map((u) => ({
-        ...u,
-        createdAt: u.createdAt.toISOString(),
-      }))}
+      users={users}
       divisions={divisions.map((d) => ({
         id:    d.id,
         name:  d.name,

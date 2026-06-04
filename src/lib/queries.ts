@@ -254,26 +254,32 @@ export const getCachedPublicHolidays = unstable_cache(
 
 // ─── Divisions ────────────────────────────────────────────────────────────────
 
-/** All divisions with owner + member/project counts. */
+/** All divisions with owner + member/project counts. Dates serialised to ISO strings. */
 export const getCachedDivisions = unstable_cache(
-  async () =>
-    prisma.division.findMany({
+  async () => {
+    const rows = await prisma.division.findMany({
       include: {
         owner:  { select: { id: true, name: true, email: true } },
         _count: { select: { members: true, projects: true } },
       },
       orderBy: { name: "asc" },
-    }),
+    });
+    return rows.map((d) => ({
+      ...d,
+      createdAt: d.createdAt.toISOString(),
+      updatedAt: d.updatedAt.toISOString(),
+    }));
+  },
   ["divisions"],
   { revalidate: TTL, tags: ["divisions"] }
 );
 
 // ─── Team (all users with division) ───────────────────────────────────────────
 
-/** All users (active + inactive) with division info — for Team page. */
+/** All users (active + inactive) with division info — for Team page. Dates serialised to ISO strings. */
 export const getCachedAllUsers = unstable_cache(
-  async () =>
-    prisma.user.findMany({
+  async () => {
+    const rows = await prisma.user.findMany({
       select: {
         id: true, name: true, email: true, image: true,
         role: true, jobTitle: true, capacity: true,
@@ -281,7 +287,12 @@ export const getCachedAllUsers = unstable_cache(
         division: { select: { id: true, name: true, code: true, color: true } },
       },
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
-    }),
+    });
+    return rows.map((u) => ({
+      ...u,
+      createdAt: u.createdAt.toISOString(),
+    }));
+  },
   ["all-users"],
   { revalidate: TTL, tags: ["users"] }
 );
