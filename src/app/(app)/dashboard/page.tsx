@@ -33,9 +33,12 @@ export default async function DashboardPage() {
       orderBy: { name: "asc" },
     }),
 
-    // Active users
+    // Active users (excluding VP job title)
     prisma.user.findMany({
-      where:   { isActive: true },
+      where: {
+        isActive: true,
+        OR: [{ jobTitle: null }, { jobTitle: { not: "VP" } }],
+      },
       select:  { id: true, name: true, email: true, role: true, jobTitle: true, capacity: true, divisionId: true },
       orderBy: { name: "asc" },
     }),

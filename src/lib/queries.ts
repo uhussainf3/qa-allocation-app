@@ -15,11 +15,14 @@ const TTL = 60; // seconds
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
-/** Active users with full select (for Allocations page, dropdowns). */
+/** Active users with full select (for Allocations page, dropdowns). Excludes VP job title. */
 export const getCachedActiveUsers = unstable_cache(
   async () =>
     prisma.user.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        OR: [{ jobTitle: null }, { jobTitle: { not: "VP" } }],
+      },
       select: { id: true, name: true, email: true, image: true, capacity: true, role: true, divisionId: true },
       orderBy: { name: "asc" },
     }),
@@ -27,11 +30,14 @@ export const getCachedActiveUsers = unstable_cache(
   { revalidate: TTL, tags: ["users"] }
 );
 
-/** Active users — minimal select (capacity + bench pages). */
+/** Active users — minimal select (capacity + bench pages). Excludes VP job title. */
 export const getCachedSimpleUsers = unstable_cache(
   async () =>
     prisma.user.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        OR: [{ jobTitle: null }, { jobTitle: { not: "VP" } }],
+      },
       select: { id: true, name: true, email: true, capacity: true, role: true, divisionId: true },
       orderBy: { name: "asc" },
     }),
@@ -101,10 +107,13 @@ export const getCachedProjectsFull = unstable_cache(
 
 // ─── Allocations ──────────────────────────────────────────────────────────────
 
-/** All allocations (manages-allocations list). Dates as ISO strings. */
+/** All allocations (manages-allocations list). Excludes VP job title. Dates as ISO strings. */
 export const getCachedAllAllocationsList = unstable_cache(
   async () => {
     const rows = await prisma.allocation.findMany({
+      where: {
+        user: { OR: [{ jobTitle: null }, { jobTitle: { not: "VP" } }] },
+      },
       include: {
         user:    { select: { id: true, name: true, email: true, image: true, capacity: true, role: true, divisionId: true } },
         project: { select: { id: true, name: true, code: true, color: true } },
