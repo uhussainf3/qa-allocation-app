@@ -1,3 +1,4 @@
 @AGENTS.md
 @CODEBASE_RULES.md
 @SCOPE.md
+@FILE_MAP.md
