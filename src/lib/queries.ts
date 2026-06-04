@@ -297,6 +297,23 @@ export const getCachedAllUsers = unstable_cache(
   { revalidate: TTL, tags: ["users"] }
 );
 
+// ─── Job Titles ───────────────────────────────────────────────────────────────
+
+/** All job titles ordered alphabetically. Dates serialised to ISO strings. */
+export const getCachedJobTitles = unstable_cache(
+  async () => {
+    const rows = await prisma.jobTitle.findMany({ orderBy: { name: "asc" } });
+    return rows.map((j) => ({
+      id:        j.id,
+      name:      j.name,
+      createdAt: j.createdAt.toISOString(),
+      updatedAt: j.updatedAt.toISOString(),
+    }));
+  },
+  ["job-titles"],
+  { revalidate: TTL, tags: ["job-titles"] }
+);
+
 // ─── Leaves ───────────────────────────────────────────────────────────────────
 
 /** Approved leaves overlapping a range (for Capacity page). Dates as ISO strings. */

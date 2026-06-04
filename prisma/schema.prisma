@@ -334,3 +334,11 @@ model PublicHoliday {
 
   @@unique([date])
 }
+
+// Job Titles — admin-managed list; value stored as User.jobTitle (String)
+model JobTitle {
+  id        String   @id @default(cuid())
+  name      String   @unique  // e.g. "QA Engineer", "Developer"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

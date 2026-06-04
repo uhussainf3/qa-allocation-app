@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type DivisionRef = { id: string; name: string; code: string; color: string };
+type JobTitleRef = { id: string; name: string };
 
 type TeamMember = {
   id:         string;
@@ -25,12 +26,12 @@ type TeamMember = {
 interface Props {
   users:     TeamMember[];
   divisions: DivisionRef[];
+  jobTitles: JobTitleRef[];
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ROLES = ["ADMIN", "EXECUTIVE", "DIVISION_OWNER", "PROJECT_MANAGER", "MEMBER"] as const;
-const JOB_TITLES = ["DEVELOPER", "QA_ENGINEER", "FUNCTIONAL_CONSULTANT", "SUPPORT_ENGINEER", "PROJECT_MANAGER", "PRODUCT_MANAGER"] as const;
 
 const ROLE_LABELS: Record<string, string> = {
   ADMIN:           "Admin",
@@ -38,15 +39,6 @@ const ROLE_LABELS: Record<string, string> = {
   DIVISION_OWNER:  "Division Owner",
   PROJECT_MANAGER: "Project Manager",
   MEMBER:          "Member",
-};
-
-const JT_LABELS: Record<string, string> = {
-  DEVELOPER:              "Developer",
-  QA_ENGINEER:            "QA Engineer",
-  FUNCTIONAL_CONSULTANT:  "Functional Consultant",
-  SUPPORT_ENGINEER:       "Support Engineer",
-  PROJECT_MANAGER:        "Project Manager",
-  PRODUCT_MANAGER:        "Product Manager",
 };
 
 const EMPTY_FORM = {
@@ -61,7 +53,7 @@ function initials(name: string | null, email: string | null) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function TeamClient({ users: initial, divisions }: Props) {
+export function TeamClient({ users: initial, divisions, jobTitles }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
@@ -285,7 +277,7 @@ export function TeamClient({ users: initial, divisions }: Props) {
 
                     {/* Job Title */}
                     <td style={{ padding: "12px 14px" }}>
-                      <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{u.jobTitle ? JT_LABELS[u.jobTitle] ?? u.jobTitle : "—"}</span>
+                      <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{u.jobTitle || "—"}</span>
                     </td>
 
                     {/* Capacity */}
@@ -360,7 +352,7 @@ export function TeamClient({ users: initial, divisions }: Props) {
                 <div style={{ marginBottom: 4, fontWeight: 500 }}>Job Title</div>
                 <select className="input" value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} style={{ width: "100%" }}>
                   <option value="">— None —</option>
-                  {JOB_TITLES.map((j) => <option key={j} value={j}>{JT_LABELS[j]}</option>)}
+                  {jobTitles.map((j) => <option key={j.id} value={j.name}>{j.name}</option>)}
                 </select>
               </label>
 

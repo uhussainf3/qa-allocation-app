@@ -60,16 +60,11 @@ export function HolidaysClient({ initialHolidays, currentUserRole }: Props) {
   }
 
   return (
-    <div className="page" data-screen-label="Settings">
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">Settings</h1>
-          <div className="page-sub">Public holidays — excluded from working-day calculations</div>
-        </div>
+    <div className="card" style={{ maxWidth: 600, marginBottom: 24 }}>
+      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Public Holidays</div>
+      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>
+        Excluded from all working-day calculations across the app.
       </div>
-
-      <div className="card" style={{ maxWidth: 600 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Public Holidays</div>
 
         {isAdmin && (
           <form
@@ -145,7 +140,6 @@ export function HolidaysClient({ initialHolidays, currentUserRole }: Props) {
             </tbody>
           </table>
         )}
-      </div>
     </div>
   );
 }
