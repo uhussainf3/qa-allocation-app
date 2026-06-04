@@ -3,11 +3,11 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getNextNWeeks, getWeekLabel, getWeekRange, getMondayOf, addWeeks } from "@/lib/weeks";
-import type { Role } from "@/types/enums";
+import type { Role, JobTitle } from "@/types/enums";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type User       = { id: string; name: string | null; email: string | null; image: string | null; capacity: number; role: Role; divisionId: string | null };
+type User       = { id: string; name: string | null; email: string | null; image: string | null; capacity: number; role: Role; jobTitle: JobTitle | null; divisionId: string | null };
 type DivisionRef = { id: string; name: string; code: string; color: string };
 type Project    = { id: string; name: string; code: string; color: string };
 type Task       = { id: string; name: string } | null;
@@ -499,7 +499,7 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
                         <span className="avatar">{initials(u.name, u.email)}</span>
                         <div>
                           <div className="person-name">{u.name}</div>
-                          <div className="person-role">{u.role.replace("_", " ")} · {u.capacity}h/wk</div>
+                          <div className="person-role">{(u.jobTitle ?? u.role).replace(/_/g, " ")} · {u.capacity}h/wk</div>
                         </div>
                       </div>
                     </div>

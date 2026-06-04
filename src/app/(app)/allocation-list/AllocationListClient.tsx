@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import type { Role } from "@/types/enums";
+import type { Role, JobTitle } from "@/types/enums";
 
 type DivisionRef = { id: string; name: string; code: string; color: string };
 
@@ -11,6 +11,7 @@ type User = {
   email: string | null;
   capacity: number;
   role: Role;
+  jobTitle: JobTitle | null;
   divisionId: string | null;
 };
 
@@ -555,7 +556,7 @@ export function AllocationListClient({ allocations, currentUserRole, divisions }
                           <div>
                             <div style={{ fontWeight: 500 }}>{a.user.name ?? a.user.email}</div>
                             <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
-                              {a.user.role.replace(/_/g, " ")}
+                              {(a.user.jobTitle ?? a.user.role).replace(/_/g, " ")}
                             </div>
                           </div>
                         </div>

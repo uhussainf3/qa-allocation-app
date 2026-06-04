@@ -23,7 +23,7 @@ export const getCachedActiveUsers = unstable_cache(
         isActive: true,
         OR: [{ jobTitle: null }, { jobTitle: { not: "VP" } }],
       },
-      select: { id: true, name: true, email: true, image: true, capacity: true, role: true, divisionId: true },
+      select: { id: true, name: true, email: true, image: true, capacity: true, role: true, jobTitle: true, divisionId: true },
       orderBy: { name: "asc" },
     }),
   ["active-users"],
@@ -115,7 +115,7 @@ export const getCachedAllAllocationsList = unstable_cache(
         user: { OR: [{ jobTitle: null }, { jobTitle: { not: "VP" } }] },
       },
       include: {
-        user:    { select: { id: true, name: true, email: true, image: true, capacity: true, role: true, divisionId: true } },
+        user:    { select: { id: true, name: true, email: true, image: true, capacity: true, role: true, jobTitle: true, divisionId: true } },
         project: { select: { id: true, name: true, code: true, color: true } },
         task:    { select: { id: true, name: true } },
       },
