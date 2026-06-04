@@ -7,7 +7,8 @@ import type { Role } from "@/types/enums";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type User       = { id: string; name: string | null; email: string | null; image: string | null; capacity: number; role: Role };
+type User       = { id: string; name: string | null; email: string | null; image: string | null; capacity: number; role: Role; divisionId: string | null };
+type DivisionRef = { id: string; name: string; code: string; color: string };
 type Project    = { id: string; name: string; code: string; color: string };
 type Task       = { id: string; name: string } | null;
 type Allocation = {
@@ -151,9 +152,9 @@ function InlineSkeleton() {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-interface Props { currentUserRole: Role; }
+interface Props { currentUserRole: Role; divisions: DivisionRef[]; }
 
-export function AllocationsClient({ currentUserRole }: Props) {
+export function AllocationsClient({ currentUserRole, divisions }: Props) {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const activeWeeks  = Number(searchParams.get("weeks") ?? 4);
@@ -232,7 +233,15 @@ export function AllocationsClient({ currentUserRole }: Props) {
     userId: "", projectId: "", startDate: todayStr, endDate: todayStr, hoursPerDay: 8,
   });
 
-  const canEdit = currentUserRole === "ADMIN" || currentUserRole === "PROJECT_MANAGER";
+  const canEdit = ["ADMIN", "DIVISION_OWNER", "PROJECT_MANAGER"].includes(currentUserRole);
+
+  const [divisionFilter, setDivisionFilter] = useState("");
+
+  // Users visible in the grid — filtered by division
+  const visibleUsers = useMemo(
+    () => divisionFilter ? users.filter((u) => u.divisionId === divisionFilter) : users,
+    [users, divisionFilter]
+  );
 
   // Derived conflict warnings — computed after all state is declared
   const newAllocConflict = useMemo(
@@ -295,7 +304,7 @@ export function AllocationsClient({ currentUserRole }: Props) {
 
   const allocMap = useMemo(() => {
     const m: Record<string, Record<string, CellEntry[]>> = {};
-    users.forEach((u) => { m[u.id] = {}; });
+    visibleUsers.forEach((u) => { m[u.id] = {}; });
     allocations.forEach((a) => {
       if (!m[a.userId]) m[a.userId] = {};
       const key = `${a.projectId}__${a.taskId ?? ""}`;
@@ -324,15 +333,15 @@ export function AllocationsClient({ currentUserRole }: Props) {
   const userTotalHours = (userId: string) =>
     weeks.reduce((s, _, i) => s + userWeekHours(userId, i), 0);
   const weekTotals     = weeks.map((w, i) => {
-    const h     = users.reduce((s, u) => s + userWeekHours(u.id, i), 0);
+    const h     = visibleUsers.reduce((s, u) => s + userWeekHours(u.id, i), 0);
     const wDays = weekWorkingDays(w.date.slice(0, 10), holidaySet);
-    const cap   = users.reduce((s, u) => s + u.capacity * wDays / 5, 0);
+    const cap   = visibleUsers.reduce((s, u) => s + u.capacity * wDays / 5, 0);
     return { h, cap: Math.round(cap), pct: cap > 0 ? Math.round((h / cap) * 100) : 0 };
   });
   const grandH    = weekTotals.reduce((s, t) => s + t.h, 0);
   const grandCap  = weekTotals.reduce((s, t) => s + t.cap, 0);
   const grandPct  = grandCap > 0 ? Math.round((grandH / grandCap) * 100) : 0;
-  const overCount = users.reduce((s, u) =>
+  const overCount = visibleUsers.reduce((s, u) =>
     s + weeks.reduce((x, w, i) => {
       const wDays  = weekWorkingDays(w.date.slice(0, 10), holidaySet);
       const effCap = u.capacity * wDays / 5;
@@ -410,6 +419,12 @@ export function AllocationsClient({ currentUserRole }: Props) {
           </div>
         </div>
         <div className="page-actions">
+          {divisions.length > 0 && (
+            <select className="select-sm" value={divisionFilter} onChange={(e) => setDivisionFilter(e.target.value)}>
+              <option value="">All divisions</option>
+              {divisions.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.code})</option>)}
+            </select>
+          )}
           <div className="seg">
             <button className={unit === "hrs" ? "active" : ""} onClick={() => setUnit("hrs")}>Hours</button>
             <button className={unit === "pct" ? "active" : ""} onClick={() => setUnit("pct")}>%</button>
@@ -467,7 +482,7 @@ export function AllocationsClient({ currentUserRole }: Props) {
               <div className="ag-cell ag-head" style={{ justifyContent: "flex-end" }}>{weeks.length}-wk total</div>
 
               {/* Engineer rows */}
-              {users.map((u) => {
+              {visibleUsers.map((u) => {
                 const open     = expanded[u.id];
                 const totalH   = userTotalHours(u.id);
                 const totalCap = Math.round(weeks.reduce((s, w) => {

@@ -1,17 +1,18 @@
 import { auth } from "@/lib/auth";
 import { totalWorkingDays } from "@/lib/weeks";
 import { ProjectsClient } from "./ProjectsClient";
-import { getCachedProjectsFull, getCachedAllAllocationsForProjects, getCachedPublicHolidays, getCachedSimpleUsers } from "@/lib/queries";
+import { getCachedProjectsFull, getCachedAllAllocationsForProjects, getCachedPublicHolidays, getCachedSimpleUsers, getCachedDivisions } from "@/lib/queries";
 import type { Role } from "@/types/enums";
 
 export default async function ProjectsPage() {
   const session = await auth();
 
-  const [{ projects, hoursConsumed }, allocations, rawHolidays, teamMembers] = await Promise.all([
+  const [{ projects, hoursConsumed }, allocations, rawHolidays, teamMembers, divisions] = await Promise.all([
     getCachedProjectsFull(),
     getCachedAllAllocationsForProjects(),
     getCachedPublicHolidays(),
     getCachedSimpleUsers(),
+    getCachedDivisions(),
   ]);
 
   const holidays = new Set(rawHolidays.map((h) => h.date));
@@ -70,6 +71,7 @@ export default async function ProjectsPage() {
       }))}
       currentUserRole={session!.user.role as Role}
       teamMembers={teamMembers.map((u) => ({ id: u.id, name: u.name }))}
+      divisions={divisions.map((d) => ({ id: d.id, name: d.name, code: d.code, color: d.color }))}
     />
   );
 }

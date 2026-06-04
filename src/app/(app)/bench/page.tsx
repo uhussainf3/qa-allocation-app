@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getCachedSimpleUsers } from "@/lib/queries";
+import { getCachedSimpleUsers, getCachedDivisions } from "@/lib/queries";
 import { BenchClient } from "./BenchClient";
 
 export default async function BenchPage() {
@@ -9,7 +9,7 @@ export default async function BenchPage() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const [users, activeAllocations] = await Promise.all([
+  const [users, activeAllocations, divisions] = await Promise.all([
     getCachedSimpleUsers(),
     prisma.allocation.findMany({
       where: {
@@ -21,6 +21,7 @@ export default async function BenchPage() {
       },
       orderBy: { endDate: "asc" },
     }),
+    getCachedDivisions(),
   ]);
 
   const bench = users
@@ -32,19 +33,22 @@ export default async function BenchPage() {
       const onBenchPct  = Math.max(0, 100 - allocatedPct);
 
       const currentAllocations = myAllocs.map((a) => ({
-        projectId:   a.project.id,
-        projectName: a.project.name,
+        projectId:    a.project.id,
+        projectName:  a.project.name,
         projectColor: a.project.color,
-        pct:         dailyCap > 0 ? Math.round((a.hoursPerDay / dailyCap) * 100) : 0,
-        endDate:     a.endDate.toISOString(),
+        pct:          dailyCap > 0 ? Math.round((a.hoursPerDay / dailyCap) * 100) : 0,
+        endDate:      a.endDate.toISOString(),
       }));
 
       return { ...u, allocatedPct, onBenchPct, currentAllocations };
     })
-    // Only show people who are NOT fully allocated
     .filter((u) => u.onBenchPct > 0)
-    // Sort: fully free first, then partial (highest bench % first)
     .sort((a, b) => b.onBenchPct - a.onBenchPct);
 
-  return <BenchClient bench={bench} />;
+  return (
+    <BenchClient
+      bench={bench}
+      divisions={divisions.map((d) => ({ id: d.id, name: d.name, code: d.code, color: d.color }))}
+    />
+  );
 }

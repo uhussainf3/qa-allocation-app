@@ -23,13 +23,15 @@ type Project = {
   id: string; name: string; code: string; description: string | null;
   clientName: string | null; status: string; sanctionedHours: number;
   startDate: string | null; endDate: string | null; color: string;
+  divisionId: string | null;
   consumedHours: number; allocatedHours: number; hoursToDate: number;
   engineerBreakdown: EngineerBreakdown[];
   tasks: { id: string; name: string; estimatedHours: number; subtasks: { id: string; name: string; estimatedHours: number }[] }[];
   _count: { allocations: number; hoursLogs: number };
 };
 
-type TeamMember = { id: string; name: string | null };
+type TeamMember   = { id: string; name: string | null };
+type DivisionRef  = { id: string; name: string; code: string; color: string };
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -63,15 +65,16 @@ const BLANK_TASK = {
 
 // ─── Props ─────────────────────────────────────────────────────────────────────
 
-interface Props { projects: Project[]; currentUserRole: Role; teamMembers: TeamMember[]; }
+interface Props { projects: Project[]; currentUserRole: Role; teamMembers: TeamMember[]; divisions: DivisionRef[]; }
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
-export function ProjectsClient({ projects: initialProjects, currentUserRole, teamMembers }: Props) {
+export function ProjectsClient({ projects: initialProjects, currentUserRole, teamMembers, divisions }: Props) {
   const router  = useRouter();
-  const canEdit = currentUserRole === "ADMIN" || currentUserRole === "PROJECT_MANAGER";
+  const canEdit = ["ADMIN", "DIVISION_OWNER", "PROJECT_MANAGER"].includes(currentUserRole);
 
-  const [projects,      setProjects]      = useState<Project[]>(initialProjects);
+  const [divisionFilter, setDivisionFilter] = useState("");
+  const [projects,       setProjects]       = useState<Project[]>(initialProjects);
   const [selected,      setSelected]      = useState<Project | null>(initialProjects[0] ?? null);
   const [activeTab,     setActiveTab]     = useState<"overview"|"tasks">("overview");
   const [showModal,     setShowModal]     = useState(false);
@@ -216,6 +219,12 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
           <div className="page-sub">{projects.length} projects</div>
         </div>
         <div className="page-actions">
+          {divisions.length > 0 && (
+            <select className="select-sm" value={divisionFilter} onChange={(e) => setDivisionFilter(e.target.value)}>
+              <option value="">All divisions</option>
+              {divisions.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.code})</option>)}
+            </select>
+          )}
           {canEdit && <button className="btn primary" onClick={() => setShowModal(true)}>+ New project</button>}
         </div>
       </div>
@@ -224,7 +233,7 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
 
         {/* ── Project list ── */}
         <div className="card" style={{ overflow:"auto" }}>
-          {projects.map((p) => (
+          {projects.filter((p) => !divisionFilter || p.divisionId === divisionFilter).map((p) => (
             <div key={p.id} onClick={() => selectProject(p)} style={{
               display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
               cursor:"pointer", borderRadius:6,

@@ -1,9 +1,17 @@
 import { auth } from "@/lib/auth";
 import { getNextNWeeks, getWeekLabel, getMondayOf, workingDaysInWeek } from "@/lib/weeks";
-import { getCachedSimpleUsers, getCachedAllocationsMinimal, getCachedApprovedLeaves, getCachedPublicHolidays } from "@/lib/queries";
+import { getCachedSimpleUsers, getCachedAllocationsMinimal, getCachedApprovedLeaves, getCachedPublicHolidays, getCachedDivisions } from "@/lib/queries";
+import { Suspense } from "react";
+import { DivisionFilter } from "@/components/DivisionFilter";
 
-export default async function CapacityPage() {
+export default async function CapacityPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ division?: string }>;
+}) {
   await auth();
+  const { division: divisionId } = await searchParams;
+
   const weeks = getNextNWeeks(12);
   const weekEnd = new Date(weeks[weeks.length - 1]);
   weekEnd.setDate(weekEnd.getDate() + 7);
@@ -11,14 +19,19 @@ export default async function CapacityPage() {
   const fromISO = weeks[0].toISOString();
   const toISO   = weekEnd.toISOString();
 
-  const [users, rawAllocations, rawLeaves, rawHolidays] = await Promise.all([
+  const [allUsers, rawAllocations, rawLeaves, rawHolidays, divisions] = await Promise.all([
     getCachedSimpleUsers(),
     getCachedAllocationsMinimal(fromISO, toISO),
     getCachedApprovedLeaves(fromISO, toISO),
     getCachedPublicHolidays(),
+    getCachedDivisions(),
   ]);
 
-  // Convert ISO strings back to Date objects for server-side calculations
+  // Apply division filter
+  const users = divisionId
+    ? allUsers.filter((u) => u.divisionId === divisionId)
+    : allUsers;
+
   const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
   const leaves      = rawLeaves.map((l) => ({ ...l, startDate: new Date(l.startDate), endDate: new Date(l.endDate) }));
   const holidays    = new Set(rawHolidays.map((h) => h.date));
@@ -29,7 +42,6 @@ export default async function CapacityPage() {
       .reduce((s, a) => s + workingDaysInWeek(monday, a.startDate, a.endDate, holidays) * a.hoursPerDay, 0);
   }
 
-  /** Effective capacity for one week: scales by non-holiday working days / 5. */
   function weekCapacity(monday: Date, perWeekCap: number): number {
     let days = 0;
     for (let i = 0; i < 5; i++) {
@@ -55,11 +67,21 @@ export default async function CapacityPage() {
     return 7;
   }
 
+  const divisionsMeta = divisions.map((d) => ({ id: d.id, name: d.name, code: d.code, color: d.color }));
+
   return (
     <div className="page" data-screen-label="Capacity">
       <div className="page-head">
-        <h1 className="page-title">Capacity</h1>
-        <div className="page-sub">12-week utilisation heatmap</div>
+        <div>
+          <h1 className="page-title">Capacity</h1>
+          <div className="page-sub">
+            12-week utilisation heatmap
+            {divisionId && divisions.find((d) => d.id === divisionId) && ` · ${divisions.find((d) => d.id === divisionId)!.name}`}
+          </div>
+        </div>
+        <Suspense>
+          <DivisionFilter divisions={divisionsMeta} value={divisionId ?? ""} />
+        </Suspense>
       </div>
       <div className="grid-wrap" style={{ overflowX: "auto" }}>
         <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: "100%" }}>

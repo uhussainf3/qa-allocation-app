@@ -1,5 +1,7 @@
 "use client";
 
+import { useState, useMemo } from "react";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ActiveAllocation = {
@@ -16,13 +18,17 @@ type BenchUser = {
   email:              string | null;
   capacity:           number;
   role:               string;
+  divisionId:         string | null;
   allocatedPct:       number;
   onBenchPct:         number;
   currentAllocations: ActiveAllocation[];
 };
 
+type DivisionRef = { id: string; name: string; code: string; color: string };
+
 interface Props {
-  bench: BenchUser[];
+  bench:     BenchUser[];
+  divisions: DivisionRef[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -46,11 +52,18 @@ function benchColor(pct: number): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function BenchClient({ bench }: Props) {
-  const fullyFree      = bench.filter((u) => u.onBenchPct === 100).length;
-  const partialFree    = bench.filter((u) => u.onBenchPct > 0 && u.onBenchPct < 100).length;
+export function BenchClient({ bench, divisions }: Props) {
+  const [divisionFilter, setDivisionFilter] = useState("");
+
+  const visible = useMemo(
+    () => divisionFilter ? bench.filter((u) => u.divisionId === divisionFilter) : bench,
+    [bench, divisionFilter]
+  );
+
+  const fullyFree      = visible.filter((u) => u.onBenchPct === 100).length;
+  const partialFree    = visible.filter((u) => u.onBenchPct > 0 && u.onBenchPct < 100).length;
   const totalFreeHours = Math.round(
-    bench.reduce((s, u) => s + (u.capacity / 5) * (u.onBenchPct / 100), 0) * 10
+    visible.reduce((s, u) => s + (u.capacity / 5) * (u.onBenchPct / 100), 0) * 10
   ) / 10;
   const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 
@@ -61,8 +74,14 @@ export function BenchClient({ bench }: Props) {
       <div className="page-head">
         <div>
           <h1 className="page-title">Bench</h1>
-          <div className="page-sub">As of {today} · {bench.length} resource{bench.length !== 1 ? "s" : ""} available</div>
+          <div className="page-sub">As of {today} · {visible.length} resource{visible.length !== 1 ? "s" : ""} available</div>
         </div>
+        {divisions.length > 0 && (
+          <select className="select-sm" value={divisionFilter} onChange={(e) => setDivisionFilter(e.target.value)}>
+            <option value="">All divisions</option>
+            {divisions.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.code})</option>)}
+          </select>
+        )}
       </div>
 
       {/* KPIs */}
@@ -79,7 +98,7 @@ export function BenchClient({ bench }: Props) {
         </div>
         <div className="kpi">
           <div className="kpi-label">Total on bench</div>
-          <div className="kpi-value">{bench.length}<span className="unit">people</span></div>
+          <div className="kpi-value">{visible.length}<span className="unit">people</span></div>
           <div className="kpi-meta">Not fully allocated</div>
         </div>
         <div className="kpi ok">
@@ -91,7 +110,7 @@ export function BenchClient({ bench }: Props) {
 
       {/* Table */}
       <div className="card" style={{ overflow: "hidden", padding: 0 }}>
-        {bench.length === 0 ? (
+        {visible.length === 0 ? (
           <div style={{ padding: 48, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>
             Everyone is fully allocated today.
           </div>
@@ -106,10 +125,10 @@ export function BenchClient({ bench }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {bench.map((u, i) => (
+                {visible.map((u, i) => (
                   <tr
                     key={u.id}
-                    style={{ borderBottom: i < bench.length - 1 ? "1px solid var(--border)" : "none" }}
+                    style={{ borderBottom: i < visible.length - 1 ? "1px solid var(--border)" : "none" }}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "var(--surface-2)"; }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = ""; }}
                   >

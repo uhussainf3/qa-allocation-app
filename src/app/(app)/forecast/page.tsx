@@ -1,27 +1,39 @@
 import { auth } from "@/lib/auth";
-import { getNextNWeeks, getWeekLabel, getMondayOf, workingDaysInWeek } from "@/lib/weeks";
-import { getCachedSimpleUsers, getCachedAllocationsMinimal, getCachedPublicHolidays } from "@/lib/queries";
+import { getNextNWeeks, getWeekLabel, workingDaysInWeek } from "@/lib/weeks";
+import { getCachedSimpleUsers, getCachedAllocationsMinimal, getCachedPublicHolidays, getCachedDivisions } from "@/lib/queries";
+import { Suspense } from "react";
+import { DivisionFilter } from "@/components/DivisionFilter";
 
-export default async function ForecastPage() {
+export default async function ForecastPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ division?: string }>;
+}) {
   await auth();
+  const { division: divisionId } = await searchParams;
+
   const weeks90 = getNextNWeeks(13);
   const weekEnd = new Date(weeks90[weeks90.length - 1]);
   weekEnd.setDate(weekEnd.getDate() + 7);
 
-  const [users, rawAllocations, rawHolidays] = await Promise.all([
+  const [allUsers, rawAllocations, rawHolidays, divisions] = await Promise.all([
     getCachedSimpleUsers(),
     getCachedAllocationsMinimal(weeks90[0].toISOString(), weekEnd.toISOString()),
     getCachedPublicHolidays(),
+    getCachedDivisions(),
   ]);
 
-  // Convert ISO strings back to Date objects for server-side calculations
+  // Apply division filter
+  const users = divisionId
+    ? allUsers.filter((u) => u.divisionId === divisionId)
+    : allUsers;
+
   const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
   const holidays    = new Set(rawHolidays.map((h) => h.date));
 
-  // Nominal (full-week) team capacity — shown in KPI tile as the baseline
+  // Nominal (full-week) team capacity
   const totalCapacityPerWeek = users.reduce((s, u) => s + u.capacity, 0);
 
-  /** Holiday-aware working-day count for Mon–Fri of the given week. */
   function weekWorkingDays(monday: Date): number {
     let days = 0;
     for (let i = 0; i < 5; i++) {
@@ -31,9 +43,14 @@ export default async function ForecastPage() {
     return days;
   }
 
+  // Filter allocations to only visible users
+  const userIds = new Set(users.map((u) => u.id));
+  const filteredAllocs = divisionId
+    ? allocations.filter((a) => userIds.has(a.userId))
+    : allocations;
+
   const weeksData = weeks90.map((w, i) => {
-    const demand  = allocations.reduce((s, a) => s + workingDaysInWeek(w, a.startDate, a.endDate, holidays) * a.hoursPerDay, 0);
-    // Effective capacity scales by holiday-adjusted working days for this specific week
+    const demand  = filteredAllocs.reduce((s, a) => s + workingDaysInWeek(w, a.startDate, a.endDate, holidays) * a.hoursPerDay, 0);
     const wDays   = weekWorkingDays(w);
     const weekCap = users.reduce((s, u) => s + u.capacity * wDays / 5, 0);
     const utilPct = weekCap > 0 ? Math.round((demand / weekCap) * 100) : 0;
@@ -48,11 +65,21 @@ export default async function ForecastPage() {
 
   const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
 
+  const divisionsMeta = divisions.map((d) => ({ id: d.id, name: d.name, code: d.code, color: d.color }));
+
   return (
     <div className="page" data-screen-label="Forecast">
       <div className="page-head">
-        <h1 className="page-title">Forecast</h1>
-        <div className="page-sub">Demand vs capacity — 30, 60, 90 day view</div>
+        <div>
+          <h1 className="page-title">Forecast</h1>
+          <div className="page-sub">
+            Demand vs capacity — 30, 60, 90 day view
+            {divisionId && divisions.find((d) => d.id === divisionId) && ` · ${divisions.find((d) => d.id === divisionId)!.name}`}
+          </div>
+        </div>
+        <Suspense>
+          <DivisionFilter divisions={divisionsMeta} value={divisionId ?? ""} />
+        </Suspense>
       </div>
 
       <div className="kpis" style={{ marginBottom: 24 }}>

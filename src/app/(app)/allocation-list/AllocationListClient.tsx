@@ -3,12 +3,15 @@
 import { useState, useMemo } from "react";
 import type { Role } from "@/types/enums";
 
+type DivisionRef = { id: string; name: string; code: string; color: string };
+
 type User = {
   id: string;
   name: string | null;
   email: string | null;
   capacity: number;
   role: Role;
+  divisionId: string | null;
 };
 
 type Project = {
@@ -48,6 +51,7 @@ type EditState = {
 interface Props {
   allocations: Allocation[];
   currentUserRole: Role;
+  divisions: DivisionRef[];
 }
 
 function fmtDate(iso: string): string {
@@ -82,13 +86,14 @@ function initials(name: string | null, email: string | null): string {
 
 type StatusFilter = "active" | "upcoming" | "expired" | "all";
 
-export function AllocationListClient({ allocations, currentUserRole }: Props) {
+export function AllocationListClient({ allocations, currentUserRole, divisions }: Props) {
   const canEdit = ["ADMIN", "DIVISION_OWNER", "PROJECT_MANAGER"].includes(currentUserRole);
 
-  const [search,         setSearch]         = useState("");
-  const [projectFilter,  setProjectFilter]  = useState("all");
-  const [resourceFilter, setResourceFilter] = useState("all");
-  const [statusFilter,   setStatusFilter]   = useState<StatusFilter>("active");
+  const [search,          setSearch]         = useState("");
+  const [projectFilter,   setProjectFilter]  = useState("all");
+  const [resourceFilter,  setResourceFilter] = useState("all");
+  const [divisionFilter,  setDivisionFilter] = useState("all");
+  const [statusFilter,    setStatusFilter]   = useState<StatusFilter>("active");
   const [editState,     setEditState]     = useState<EditState | null>(null);
   const [saving,        setSaving]        = useState(false);
   const [deleteId,      setDeleteId]      = useState<string | null>(null);
@@ -96,43 +101,50 @@ export function AllocationListClient({ allocations, currentUserRole }: Props) {
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
+  // Base — pre-filtered by division
+  const divBase = useMemo(() =>
+    divisionFilter === "all"
+      ? allocations
+      : allocations.filter((a) => a.user.divisionId === divisionFilter),
+  [allocations, divisionFilter]);
+
   // Projects list — narrowed to those the selected resource is allocated to
   const projects = useMemo(() => {
     const source = resourceFilter === "all"
-      ? allocations
-      : allocations.filter((a) => a.user.id === resourceFilter);
+      ? divBase
+      : divBase.filter((a) => a.user.id === resourceFilter);
     const seen = new Map<string, { id: string; name: string; code: string }>();
     for (const a of source) {
       if (!seen.has(a.project.id))
         seen.set(a.project.id, { id: a.project.id, name: a.project.name, code: a.project.code });
     }
     return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [allocations, resourceFilter]);
+  }, [divBase, resourceFilter]);
 
   // Resources list — narrowed to those allocated on the selected project
   const resources = useMemo(() => {
     const source = projectFilter === "all"
-      ? allocations
-      : allocations.filter((a) => a.project.id === projectFilter);
+      ? divBase
+      : divBase.filter((a) => a.project.id === projectFilter);
     const seen = new Map<string, { id: string; name: string }>();
     for (const a of source) {
       if (!seen.has(a.user.id))
         seen.set(a.user.id, { id: a.user.id, name: a.user.name ?? a.user.email ?? "Unknown" });
     }
     return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [allocations, projectFilter]);
+  }, [divBase, projectFilter]);
 
-  // Tab counts — computed once from full list
+  // Tab counts — scoped to the current division filter
   const counts = useMemo(() => ({
-    active:   allocations.filter((a) => a.startDate.slice(0,10) <= todayStr && a.endDate.slice(0,10) >= todayStr).length,
-    upcoming: allocations.filter((a) => a.startDate.slice(0,10) > todayStr).length,
-    expired:  allocations.filter((a) => a.endDate.slice(0,10)   < todayStr).length,
-    all:      allocations.length,
-  }), [allocations, todayStr]);
+    active:   divBase.filter((a) => a.startDate.slice(0,10) <= todayStr && a.endDate.slice(0,10) >= todayStr).length,
+    upcoming: divBase.filter((a) => a.startDate.slice(0,10) > todayStr).length,
+    expired:  divBase.filter((a) => a.endDate.slice(0,10)   < todayStr).length,
+    all:      divBase.length,
+  }), [divBase, todayStr]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    return allocations.filter((a) => {
+    return divBase.filter((a) => {
       // Date filter
       const start = a.startDate.slice(0, 10);
       const end   = a.endDate.slice(0, 10);
@@ -156,7 +168,7 @@ export function AllocationListClient({ allocations, currentUserRole }: Props) {
 
       return true;
     });
-  }, [allocations, search, projectFilter, resourceFilter, statusFilter, todayStr]);
+  }, [divBase, search, projectFilter, resourceFilter, statusFilter, todayStr]);
 
   // ── Resource summary (when one resource selected, no project) ────────────────
   const resourceSummary = useMemo(() => {
@@ -358,6 +370,18 @@ export function AllocationListClient({ allocations, currentUserRole }: Props) {
             </button>
           )}
         </div>
+        {divisions.length > 0 && (
+          <select
+            className="select-sm"
+            value={divisionFilter}
+            onChange={(e) => { setDivisionFilter(e.target.value); setResourceFilter("all"); setProjectFilter("all"); }}
+          >
+            <option value="all">All divisions</option>
+            {divisions.map((d) => (
+              <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+            ))}
+          </select>
+        )}
         <select
           className="select-sm"
           value={resourceFilter}
