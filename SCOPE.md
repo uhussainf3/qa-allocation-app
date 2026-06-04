@@ -59,7 +59,7 @@ Claude reads this at the start of every session and updates it as features are c
 
 | # | Feature | Status | Notes |
 |---|---------|--------|-------|
-| — | *(No pending features at this time)* | — | — |
+| 1 | Job Title management UI | ✅ Done | Settings page — add/edit/delete; TeamClient dropdown driven from DB |
 
 ---
 
