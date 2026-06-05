@@ -134,7 +134,12 @@ These handle UI state, dropdowns, modals, CRUD calls. Always in a `*Client.tsx` 
 | `app/api/holidays/[id]/route.ts` | `DELETE /api/holidays/[id]` | Delete a public holiday |
 | `app/api/skills/route.ts` | `GET/POST/PATCH/DELETE /api/skills` | Skills CRUD |
 | `app/api/notifications/route.ts` | `GET/PATCH /api/notifications` | List notifications / mark as read |
-| `app/api/import/route.ts` | `POST /api/import` | Bulk CSV import for allocations |
+| `app/api/import/route.ts` | `POST /api/import` | Legacy CSV bulk import for allocations (by email + project code) |
+| `app/api/import/divisions/route.ts` | `POST /api/import/divisions` | ADMIN — create division-owner users + divisions from RM director rows |
+| `app/api/import/projects/route.ts` | `POST /api/import/projects` | ADMIN — upsert projects by externalId, map status, link to division via director |
+| `app/api/import/employees/route.ts` | `POST /api/import/employees` | ADMIN — upsert employees; jobTitle from Position column, department from Role column |
+| `app/api/import/allocations/route.ts` | `POST /api/import/allocations` | ADMIN — create AllocationBatch + upsert allocations; dryRun:true for preview counts |
+| `app/api/import/allocations/batches/route.ts` | `GET /api/import/allocations/batches` | List all AllocationBatch records newest-first with allocation counts |
 | `app/api/keep-alive/route.ts` | `GET /api/keep-alive` | Pings DB to prevent Neon cold start |
 | `app/api/auth/[...nextauth]/route.ts` | `/api/auth/*` | NextAuth.js handler (Google OAuth) |
 | `app/api/test/session/route.ts` | `/api/test/session` | Dev-only: inspect current session |

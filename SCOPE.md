@@ -61,9 +61,14 @@ Claude reads this at the start of every session and updates it as features are c
 |---|---------|--------|-------|
 | 1 | Job Title management UI | ✅ Done | Settings page — add/edit/delete; TeamClient dropdown driven from DB |
 | 2 | RM Tool Data Migration — Schema | ✅ Done | externalId on User+Project; AllocationBatch model; batchId on Allocation; db push to dev |
-| 3 | RM Tool Data Migration — API routes | ✅ Done | POST /api/import/divisions, /projects, /employees, /allocations |
-| 4 | RM Tool Data Migration — Import UI | ✅ Done | RM Tool Migration tab: upload 3 CSVs, client-side parse, 4-stage progress wizard |
+| 3 | RM Tool Data Migration — API routes | ✅ Done | POST /api/import/divisions, /projects, /employees, /allocations (dry-run support); GET /api/import/allocations/batches |
+| 4 | RM Tool Data Migration — Import UI | ✅ Done | RM Tool Migration tab: upload 3 CSVs, client-side parse, 4-stage progress wizard; file inputs use hidden input + button ref pattern |
 | 5 | Weekly Batch Upload UI | ✅ Done | Weekly Upload tab (ADMIN+DO): dry-run preview → confirm import; batch selector on Allocations page; old batches read-only with banner |
+| 6 | Employee import — jobTitle + department | ✅ Done | Position column → jobTitle (stored as-is e.g. "Senior QA Engineer"); RM Role column → department ("Developer"/"QA Engineer"/"Project Manager"/"Functional Consultant"); backfills on re-import |
+| 7 | Allocations grid — Role filter | ✅ Done | Role dropdown (from User.department) alongside Division filter; both filters combine |
+| 8 | Allocations grid — hours rounding | ✅ Done | All hours display rounded to whole numbers (r1 helper); underlying stored values unchanged |
+| 9 | Bench page — three views | ✅ Done | Detailed (unchanged) / Simple (name + bench% only) / +30 days (who frees up in 30 days); segmented control switcher |
+| 10 | Bench page — Sum of bench % KPI tile | ✅ Done | New tile showing sum of onBenchPct across visible bench resources |
 
 ---
 
