@@ -56,6 +56,7 @@ model User {
   role          String    @default("MEMBER")
   jobTitle      String?   // DEVELOPER | QA_ENGINEER | FUNCTIONAL_CONSULTANT | SUPPORT_ENGINEER | PROJECT_MANAGER | PRODUCT_MANAGER
   isActive      Boolean   @default(true)
+  isOnshore     Boolean   @default(false)
   capacity      Int       @default(40)
   department    String?
   divisionId    String?
@@ -156,6 +157,7 @@ model AllocationBatch {
   uploadedById String
   isCurrent    Boolean      @default(false)
   sourceFile   String
+  log          Json?
 
   uploadedBy   User         @relation(fields: [uploadedById], references: [id])
   allocations  Allocation[]

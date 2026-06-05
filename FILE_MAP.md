@@ -16,7 +16,7 @@ These fetch data from DB and pass it to Client components. No interactivity here
 | `app/(app)/allocation-list/page.tsx` | `/allocation-list` | Fetches all allocations list view; passes to AllocationListClient |
 | `app/(app)/capacity/page.tsx` | `/capacity` | Fetches 12-week capacity data, filters by division via URL searchParam |
 | `app/(app)/forecast/page.tsx` | `/forecast` | Fetches 13-week demand vs capacity; filters by division via URL searchParam |
-| `app/(app)/bench/page.tsx` | `/bench` | Fetches today's active allocations to calculate who is on bench; passes to BenchClient |
+| `app/(app)/bench/page.tsx` | `/bench` | Fetches today's active allocations; excludes isOnshore users before bench calc; passes to BenchClient |
 | `app/(app)/projects/page.tsx` | `/projects` | Fetches projects + all allocations + hours consumed; passes to ProjectsClient |
 | `app/(app)/conflicts/page.tsx` | `/conflicts` | Fetches 4-week allocations and calculates over-allocated engineers (no client component) |
 | `app/(app)/dashboard/page.tsx` | `/dashboard` | Executive dashboard — fetches divisions, users, today's allocations, projects, leaves, pipeline |
@@ -44,7 +44,7 @@ These handle UI state, dropdowns, modals, CRUD calls. Always in a `*Client.tsx` 
 |------|-------------|-------------|
 | `app/(app)/allocations/AllocationsClient.tsx` | `/allocations` | Interactive weekly grid — add/edit/delete allocations, division filter dropdown |
 | `app/(app)/allocation-list/AllocationListClient.tsx` | `/allocation-list` | Sortable/filterable allocation list — resource, project, division filters, inline edit |
-| `app/(app)/bench/BenchClient.tsx` | `/bench` | Bench table with KPI tiles, division filter dropdown |
+| `app/(app)/bench/BenchClient.tsx` | `/bench` | Bench table with KPI tiles; division/role/PM filter dropdowns; CSV export; compact simple+30 row layout |
 | `app/(app)/projects/ProjectsClient.tsx` | `/projects` | Project cards with status/hours/engineer breakdown, add/edit project modal, division filter |
 | `app/(app)/dashboard/DashboardClient.tsx` | `/dashboard` | Company KPIs, per-division utilisation bars, ending-soon table, pipeline summary |
 | `app/(app)/team/TeamClient.tsx` | `/team` | Full team roster — search, filters, add/edit/deactivate member modal |
@@ -56,7 +56,7 @@ These handle UI state, dropdowns, modals, CRUD calls. Always in a `*Client.tsx` 
 | `app/(app)/timesheets/TimesheetsClient.tsx` | `/timesheets` | Timesheet submit/review/approve flow |
 | `app/(app)/tasks/MyTasksClient.tsx` | `/tasks` | My tasks list — fetches tasks client-side, mark complete |
 | `app/(app)/settings/HolidaysClient.tsx` | `/settings` | Add/delete public holidays (ADMIN only) |
-| `app/(app)/import/ImportClient.tsx` | `/import` | CSV import wizard for bulk allocations |
+| `app/(app)/import/ImportClient.tsx` | `/import` | CSV import wizard; Weekly Upload (auto-create employees/projects, import logs); Import History tab |
 | `app/(app)/notifications/NotificationsClient.tsx` | `/notifications` | Notification list, mark as read |
 | `app/(auth)/login/LoginButton.tsx` | `/login` | Google sign-in button |
 
@@ -138,8 +138,8 @@ These handle UI state, dropdowns, modals, CRUD calls. Always in a `*Client.tsx` 
 | `app/api/import/divisions/route.ts` | `POST /api/import/divisions` | ADMIN — create division-owner users + divisions from RM director rows |
 | `app/api/import/projects/route.ts` | `POST /api/import/projects` | ADMIN — upsert projects by externalId, map status, link to division via director |
 | `app/api/import/employees/route.ts` | `POST /api/import/employees` | ADMIN — upsert employees; jobTitle from Position column, department from Role column |
-| `app/api/import/allocations/route.ts` | `POST /api/import/allocations` | ADMIN — create AllocationBatch + upsert allocations; dryRun:true for preview counts |
-| `app/api/import/allocations/batches/route.ts` | `GET /api/import/allocations/batches` | List all AllocationBatch records newest-first with allocation counts |
+| `app/api/import/allocations/route.ts` | `POST /api/import/allocations` | ADMIN+DO — create AllocationBatch + upsert allocations; auto-creates missing employees/projects; dryRun:true for preview; stores log JSON on batch |
+| `app/api/import/allocations/batches/route.ts` | `GET /api/import/allocations/batches` | List all AllocationBatch records newest-first with allocation counts, log, and uploader name |
 | `app/api/keep-alive/route.ts` | `GET /api/keep-alive` | Pings DB to prevent Neon cold start |
 | `app/api/auth/[...nextauth]/route.ts` | `/api/auth/*` | NextAuth.js handler (Google OAuth) |
 | `app/api/test/session/route.ts` | `/api/test/session` | Dev-only: inspect current session |

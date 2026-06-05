@@ -19,6 +19,7 @@ type BenchUser = {
   capacity:           number;
   role:               string;
   jobTitle:           string | null;
+  department:         string | null;
   divisionId:         string | null;
   allocatedPct:       number;
   onBenchPct:         number;
@@ -26,12 +27,13 @@ type BenchUser = {
 };
 
 type SimpleUser = {
-  id:        string;
-  name:      string | null;
-  email:     string | null;
-  capacity:  number;
-  role:      string;
-  jobTitle:  string | null;
+  id:         string;
+  name:       string | null;
+  email:      string | null;
+  capacity:   number;
+  role:       string;
+  jobTitle:   string | null;
+  department: string | null;
   divisionId: string | null;
 };
 
@@ -110,25 +112,53 @@ const TH_STYLE: React.CSSProperties = {
 export function BenchClient({ bench, bench30, allUsers, divisions }: Props) {
   const [view,           setView]           = useState<View>("detailed");
   const [divisionFilter, setDivisionFilter] = useState("");
+  const [roleFilter,     setRoleFilter]     = useState("");
+  const [pmFilter,       setPmFilter]       = useState("");
 
   const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 
-  // Filter helpers
+  // PM options — project managers derived from allUsers
+  const pmOptions = useMemo(() =>
+    allUsers
+      .filter((u) => u.role === "PROJECT_MANAGER")
+      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")),
+  [allUsers]);
+
+  // Division of the selected PM
+  const pmDivisionId = useMemo(() =>
+    pmFilter ? (pmOptions.find((p) => p.id === pmFilter)?.divisionId ?? null) : null,
+  [pmFilter, pmOptions]);
+
+  // Unique role options (departments) from all bench users
+  const roleOptions = useMemo(() => {
+    const seen = new Set<string>();
+    bench.forEach((u) => { if (u.department) seen.add(u.department); });
+    return [...seen].sort();
+  }, [bench]);
+
+  // Apply all filters to today's bench
   const visibleBench = useMemo(
-    () => divisionFilter ? bench.filter((u) => u.divisionId === divisionFilter) : bench,
-    [bench, divisionFilter]
+    () => bench.filter((u) => {
+      if (divisionFilter && u.divisionId !== divisionFilter) return false;
+      if (pmDivisionId   && u.divisionId !== pmDivisionId)   return false;
+      if (roleFilter     && u.department  !== roleFilter)     return false;
+      return true;
+    }),
+    [bench, divisionFilter, pmDivisionId, roleFilter]
   );
 
   // For 30-day view: all users who will have bench capacity at +30 days
   const bench30Users = useMemo(() => {
     const filtered = allUsers.filter((u) => {
       if (divisionFilter && u.divisionId !== divisionFilter) return false;
+      if (pmDivisionId   && u.divisionId !== pmDivisionId)   return false;
+      if (roleFilter     && u.department  !== roleFilter)     return false;
       return (bench30[u.id] ?? 0) > 0;
     });
     return filtered
       .map((u) => ({ ...u, onBenchPct: bench30[u.id] ?? 0 }))
       .sort((a, b) => b.onBenchPct - a.onBenchPct);
-  }, [allUsers, bench30, divisionFilter]);
+  }, [allUsers, bench30, divisionFilter, pmDivisionId, roleFilter]);
 
   // KPIs (today)
   const fullyFree      = visibleBench.filter((u) => u.onBenchPct === 100).length;
@@ -137,6 +167,36 @@ export function BenchClient({ bench, bench30, allUsers, divisions }: Props) {
     visibleBench.reduce((s, u) => s + (u.capacity / 5) * (u.onBenchPct / 100), 0) * 10
   ) / 10;
   const sumBenchPct    = visibleBench.reduce((s, u) => s + u.onBenchPct, 0);
+
+  // ── CSV Export ────────────────────────────────────────────────────────────
+  function exportCsv() {
+    const isThirty = view === "thirty";
+    const data     = isThirty ? bench30Users : visibleBench;
+    const headers  = isThirty
+      ? ["Name", "Role", "Department", "Bench % (in 30 days)"]
+      : ["Name", "Role", "Department", "Bench %", "Allocated %", "Current Projects"];
+
+    const rows = data.map((u) => {
+      const name  = u.name ?? u.email ?? "";
+      const role  = u.jobTitle ?? u.role.replace(/_/g, " ");
+      const dept  = u.department ?? "";
+      if (isThirty) {
+        return [name, role, dept, String(u.onBenchPct)];
+      }
+      const bu         = u as BenchUser;
+      const projects   = bu.currentAllocations?.map((a) => `${a.projectName} (${a.pct}%)`).join("; ") ?? "";
+      return [name, role, dept, String(bu.onBenchPct), String(bu.allocatedPct), projects];
+    });
+
+    const csv   = [headers, ...rows].map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob  = new Blob([csv], { type: "text/csv" });
+    const url   = URL.createObjectURL(blob);
+    const a     = document.createElement("a");
+    a.href      = url;
+    a.download  = `bench-${view}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className="page" data-screen-label="Bench">
@@ -154,11 +214,24 @@ export function BenchClient({ bench, bench30, allUsers, divisions }: Props) {
         </div>
         <div className="page-actions">
           {divisions.length > 0 && (
-            <select className="select-sm" value={divisionFilter} onChange={(e) => setDivisionFilter(e.target.value)}>
+            <select className="select-sm" value={divisionFilter} onChange={(e) => { setDivisionFilter(e.target.value); setPmFilter(""); setRoleFilter(""); }}>
               <option value="">All divisions</option>
               {divisions.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.code})</option>)}
             </select>
           )}
+          {pmOptions.length > 0 && (
+            <select className="select-sm" value={pmFilter} onChange={(e) => setPmFilter(e.target.value)}>
+              <option value="">All managers</option>
+              {pmOptions.map((p) => <option key={p.id} value={p.id}>{p.name ?? p.email}</option>)}
+            </select>
+          )}
+          {roleOptions.length > 0 && (
+            <select className="select-sm" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+              <option value="">All roles</option>
+              {roleOptions.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          )}
+          <button className="btn" onClick={exportCsv} title="Export to CSV">↓ CSV</button>
           <div className="seg">
             <button className={view === "detailed" ? "active" : ""} onClick={() => setView("detailed")}>Detailed</button>
             <button className={view === "simple"   ? "active" : ""} onClick={() => setView("simple")}>Simple</button>
@@ -266,74 +339,56 @@ export function BenchClient({ bench, bench30, allUsers, divisions }: Props) {
 
       {/* ── Simple view ─────────────────────────────────────────────────────── */}
       {view === "simple" && (
-        <div className="card" style={{ overflow: "hidden", padding: 0 }}>
+        <div className="card" style={{ overflow: "hidden", padding: 0, maxWidth: 680 }}>
           {visibleBench.length === 0 ? (
             <div style={{ padding: 48, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>
               Everyone is fully allocated today.
             </div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr>
-                  <th style={{ ...TH_STYLE }}>Resource</th>
-                  <th style={{ ...TH_STYLE, textAlign: "center", width: "160px" }}>Bench</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleBench.map((u, i) => (
-                  <tr
-                    key={u.id}
-                    style={{ borderBottom: i < visibleBench.length - 1 ? "1px solid var(--border)" : "none" }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "var(--surface-2)"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = ""; }}
-                  >
-                    <td style={{ padding: "12px 16px", verticalAlign: "middle" }}>
-                      <ResourceCell {...u} />
-                    </td>
-                    <td style={{ padding: "12px 16px", verticalAlign: "middle", textAlign: "center" }}>
-                      <BenchBar pct={u.onBenchPct} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            visibleBench.map((u, i) => (
+              <div
+                key={u.id}
+                style={{
+                  display: "flex", alignItems: "center", gap: 16, padding: "12px 16px",
+                  borderBottom: i < visibleBench.length - 1 ? "1px solid var(--border)" : "none",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "var(--surface-2)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = ""; }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <ResourceCell {...u} />
+                </div>
+                <BenchBar pct={u.onBenchPct} />
+              </div>
+            ))
           )}
         </div>
       )}
 
       {/* ── +30-day view ─────────────────────────────────────────────────────── */}
       {view === "thirty" && (
-        <div className="card" style={{ overflow: "hidden", padding: 0 }}>
+        <div className="card" style={{ overflow: "hidden", padding: 0, maxWidth: 680 }}>
           {bench30Users.length === 0 ? (
             <div style={{ padding: 48, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>
               Everyone will be fully allocated in 30 days.
             </div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr>
-                  <th style={{ ...TH_STYLE }}>Resource</th>
-                  <th style={{ ...TH_STYLE, textAlign: "center", width: "160px" }}>Bench in 30 days</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bench30Users.map((u, i) => (
-                  <tr
-                    key={u.id}
-                    style={{ borderBottom: i < bench30Users.length - 1 ? "1px solid var(--border)" : "none" }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "var(--surface-2)"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = ""; }}
-                  >
-                    <td style={{ padding: "12px 16px", verticalAlign: "middle" }}>
-                      <ResourceCell {...u} />
-                    </td>
-                    <td style={{ padding: "12px 16px", verticalAlign: "middle", textAlign: "center" }}>
-                      <BenchBar pct={u.onBenchPct} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            bench30Users.map((u, i) => (
+              <div
+                key={u.id}
+                style={{
+                  display: "flex", alignItems: "center", gap: 16, padding: "12px 16px",
+                  borderBottom: i < bench30Users.length - 1 ? "1px solid var(--border)" : "none",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "var(--surface-2)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = ""; }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <ResourceCell {...u} />
+                </div>
+                <BenchBar pct={u.onBenchPct} />
+              </div>
+            ))
           )}
         </div>
       )}

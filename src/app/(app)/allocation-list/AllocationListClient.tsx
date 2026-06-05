@@ -12,6 +12,7 @@ type User = {
   capacity: number;
   role: Role;
   jobTitle: JobTitle | null;
+  department: string | null;
   divisionId: string | null;
 };
 
@@ -49,10 +50,13 @@ type EditState = {
   userCapacity: number;
 };
 
+type PMRef = { id: string; name: string | null; email: string | null; divisionId: string | null };
+
 interface Props {
   allocations: Allocation[];
   currentUserRole: Role;
   divisions: DivisionRef[];
+  projectManagers: PMRef[];
 }
 
 function fmtDate(iso: string): string {
@@ -87,13 +91,15 @@ function initials(name: string | null, email: string | null): string {
 
 type StatusFilter = "active" | "upcoming" | "expired" | "all";
 
-export function AllocationListClient({ allocations, currentUserRole, divisions }: Props) {
+export function AllocationListClient({ allocations, currentUserRole, divisions, projectManagers }: Props) {
   const canEdit = ["ADMIN", "DIVISION_OWNER", "PROJECT_MANAGER"].includes(currentUserRole);
 
   const [search,          setSearch]         = useState("");
   const [projectFilter,   setProjectFilter]  = useState("all");
   const [resourceFilter,  setResourceFilter] = useState("all");
   const [divisionFilter,  setDivisionFilter] = useState("all");
+  const [roleFilter,      setRoleFilter]     = useState("all");
+  const [pmFilter,        setPmFilter]       = useState("all");
   const [statusFilter,    setStatusFilter]   = useState<StatusFilter>("active");
   const [editState,     setEditState]     = useState<EditState | null>(null);
   const [saving,        setSaving]        = useState(false);
@@ -109,43 +115,69 @@ export function AllocationListClient({ allocations, currentUserRole, divisions }
       : allocations.filter((a) => a.user.divisionId === divisionFilter),
   [allocations, divisionFilter]);
 
+  // PM base — further filtered by the selected PM's division
+  const pmDivisionId = useMemo(() => {
+    if (pmFilter === "all") return null;
+    return projectManagers.find((p) => p.id === pmFilter)?.divisionId ?? null;
+  }, [pmFilter, projectManagers]);
+
+  const pmBase = useMemo(() =>
+    pmDivisionId ? divBase.filter((a) => a.user.divisionId === pmDivisionId) : divBase,
+  [divBase, pmDivisionId]);
+
+  // Role base — pre-filtered by division + PM + role
+  const roleBase = useMemo(() =>
+    roleFilter === "all"
+      ? pmBase
+      : pmBase.filter((a) => (a.user.department ?? "") === roleFilter),
+  [pmBase, roleFilter]);
+
+  // Unique roles available in the current division/PM filter
+  const roles = useMemo(() => {
+    const seen = new Set<string>();
+    for (const a of pmBase) {
+      if (a.user.department) seen.add(a.user.department);
+    }
+    return [...seen].sort();
+  }, [pmBase]);
+
   // Projects list — narrowed to those the selected resource is allocated to
   const projects = useMemo(() => {
     const source = resourceFilter === "all"
-      ? divBase
-      : divBase.filter((a) => a.user.id === resourceFilter);
+      ? roleBase
+      : roleBase.filter((a) => a.user.id === resourceFilter);
     const seen = new Map<string, { id: string; name: string; code: string }>();
     for (const a of source) {
       if (!seen.has(a.project.id))
         seen.set(a.project.id, { id: a.project.id, name: a.project.name, code: a.project.code });
     }
     return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [divBase, resourceFilter]);
+  }, [roleBase, resourceFilter]);
 
   // Resources list — narrowed to those allocated on the selected project
   const resources = useMemo(() => {
     const source = projectFilter === "all"
-      ? divBase
-      : divBase.filter((a) => a.project.id === projectFilter);
+      ? roleBase
+      : roleBase.filter((a) => a.project.id === projectFilter);
     const seen = new Map<string, { id: string; name: string }>();
     for (const a of source) {
       if (!seen.has(a.user.id))
         seen.set(a.user.id, { id: a.user.id, name: a.user.name ?? a.user.email ?? "Unknown" });
     }
     return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [divBase, projectFilter]);
+  }, [roleBase, projectFilter]);
 
-  // Tab counts — scoped to the current division filter
+  // Tab counts — scoped to the current division + role filter
   const counts = useMemo(() => ({
-    active:   divBase.filter((a) => a.startDate.slice(0,10) <= todayStr && a.endDate.slice(0,10) >= todayStr).length,
-    upcoming: divBase.filter((a) => a.startDate.slice(0,10) > todayStr).length,
-    expired:  divBase.filter((a) => a.endDate.slice(0,10)   < todayStr).length,
-    all:      divBase.length,
-  }), [divBase, todayStr]);
+    active:   roleBase.filter((a) => a.startDate.slice(0,10) <= todayStr && a.endDate.slice(0,10) >= todayStr).length,
+    upcoming: roleBase.filter((a) => a.startDate.slice(0,10) > todayStr).length,
+    expired:  roleBase.filter((a) => a.endDate.slice(0,10)   < todayStr).length,
+    all:      roleBase.length,
+  }), [roleBase, todayStr]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    return divBase.filter((a) => {
+    return roleBase.filter((a) => {
       // Date filter
       const start = a.startDate.slice(0, 10);
       const end   = a.endDate.slice(0, 10);
@@ -169,7 +201,7 @@ export function AllocationListClient({ allocations, currentUserRole, divisions }
 
       return true;
     });
-  }, [divBase, search, projectFilter, resourceFilter, statusFilter, todayStr]);
+  }, [roleBase, search, projectFilter, resourceFilter, statusFilter, todayStr]);
 
   // ── Resource summary (when one resource selected, no project) ────────────────
   const resourceSummary = useMemo(() => {
@@ -375,11 +407,35 @@ export function AllocationListClient({ allocations, currentUserRole, divisions }
           <select
             className="select-sm"
             value={divisionFilter}
-            onChange={(e) => { setDivisionFilter(e.target.value); setResourceFilter("all"); setProjectFilter("all"); }}
+            onChange={(e) => { setDivisionFilter(e.target.value); setResourceFilter("all"); setProjectFilter("all"); setRoleFilter("all"); setPmFilter("all"); }}
           >
             <option value="all">All divisions</option>
             {divisions.map((d) => (
               <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+            ))}
+          </select>
+        )}
+        {projectManagers.length > 0 && (
+          <select
+            className="select-sm"
+            value={pmFilter}
+            onChange={(e) => { setPmFilter(e.target.value); setResourceFilter("all"); setProjectFilter("all"); setRoleFilter("all"); }}
+          >
+            <option value="all">All managers</option>
+            {projectManagers.map((p) => (
+              <option key={p.id} value={p.id}>{p.name ?? p.email ?? p.id}</option>
+            ))}
+          </select>
+        )}
+        {roles.length > 0 && (
+          <select
+            className="select-sm"
+            value={roleFilter}
+            onChange={(e) => { setRoleFilter(e.target.value); setResourceFilter("all"); setProjectFilter("all"); }}
+          >
+            <option value="all">All roles</option>
+            {roles.map((r) => (
+              <option key={r} value={r}>{r}</option>
             ))}
           </select>
         )}

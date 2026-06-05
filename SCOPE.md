@@ -69,6 +69,19 @@ Claude reads this at the start of every session and updates it as features are c
 | 8 | Allocations grid — hours rounding | ✅ Done | All hours display rounded to whole numbers (r1 helper); underlying stored values unchanged |
 | 9 | Bench page — three views | ✅ Done | Detailed (unchanged) / Simple (name + bench% only) / +30 days (who frees up in 30 days); segmented control switcher |
 | 10 | Bench page — Sum of bench % KPI tile | ✅ Done | New tile showing sum of onBenchPct across visible bench resources |
+| 11 | Manage Allocations — Role filter | ✅ Done | Role dropdown filters allocations by User.department; chains with division filter |
+| 12 | Allocations grid — engineer count respects filters | ✅ Done | "X engineers" subtitle and KPI tile now use visibleUsers.length (not raw users.length) |
+| 13 | Weekly Upload — preview bug fixes | ✅ Done | Fixed 0/0/0 counts (response format mismatch); added loading state; CSV-only validation (client+server); file clear button; DIVISION_OWNER access; robust JSON error handling |
+| 14 | Weekly Upload — enriched error display | ✅ Done | How-to-fix callout groups missing employees/projects by ID; error table shows row data (employeeId, projectId, dates) |
+| 15 | Weekly Upload — auto-create missing employees/projects | ✅ Done | Parses Emp Name, Project Name, Director ID from CSV; auto-creates missing User/Project records with real names; derives division from Director ID |
+| 16 | Weekly Upload — import logs | ✅ Done | AllocationBatch.log Json? stores full import summary per batch; log save wrapped in try/catch so import never fails if logging errors |
+| 17 | Import History tab | ✅ Done | New tab (ADMIN+DO) listing all past batches; expandable per-batch log: summary grid + auto-created employees/projects + skipped rows |
+| 18 | Bench — Role + PM filters | ✅ Done | Role dropdown (User.department); PM dropdown (PROJECT_MANAGER users); PM filter narrows to resources in PM's division |
+| 19 | Bench — UI improvements | ✅ Done | Simple and +30 views use compact flex rows (maxWidth 680px) — name and bench% no longer at extreme corners |
+| 20 | Bench — Export to CSV | ✅ Done | "↓ CSV" button downloads current filtered view (all 3 views supported); includes projects column for detailed view |
+| 21 | Allocations grid — PM filter | ✅ Done | "All managers" dropdown; selecting PM filters grid to resources in that PM's division |
+| 22 | Manage Allocations — PM filter | ✅ Done | Same PM filter; chains division → PM → role → resource/project |
+| 23 | isOnshore flag on User | ✅ Done | Schema: isOnshore Boolean @default(false); Team page edit modal checkbox with description; bench page excludes onshore users entirely; API PATCH supports field |
 
 ---
 

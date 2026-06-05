@@ -257,6 +257,19 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
 
   const [divisionFilter, setDivisionFilter] = useState("");
   const [roleFilter,     setRoleFilter]     = useState("");
+  const [pmFilter,       setPmFilter]       = useState("");
+
+  // PM options — users with PROJECT_MANAGER role
+  const pmOptions = useMemo(() =>
+    users.filter((u) => u.role === "PROJECT_MANAGER")
+         .map((u) => ({ id: u.id, name: u.name ?? u.email ?? u.id, divisionId: u.divisionId }))
+         .sort((a, b) => a.name.localeCompare(b.name)),
+  [users]);
+
+  // Division of the selected PM (used to filter resources)
+  const pmDivisionId = useMemo(() =>
+    pmFilter ? (pmOptions.find((p) => p.id === pmFilter)?.divisionId ?? null) : null,
+  [pmFilter, pmOptions]);
 
   // Unique role options derived from loaded users (only non-null departments)
   const roleOptions = useMemo(() => {
@@ -265,14 +278,15 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
     return Array.from(seen).sort();
   }, [users]);
 
-  // Users visible in the grid — filtered by division AND role
+  // Users visible in the grid — filtered by division, role AND PM's division
   const visibleUsers = useMemo(
     () => users.filter((u) => {
-      if (divisionFilter && u.divisionId !== divisionFilter) return false;
-      if (roleFilter     && u.department  !== roleFilter)    return false;
+      if (divisionFilter                  && u.divisionId !== divisionFilter)  return false;
+      if (roleFilter                      && u.department  !== roleFilter)      return false;
+      if (pmDivisionId                    && u.divisionId  !== pmDivisionId)   return false;
       return true;
     }),
-    [users, divisionFilter, roleFilter]
+    [users, divisionFilter, roleFilter, pmDivisionId]
   );
 
   // Derived conflict warnings — computed after all state is declared
@@ -454,7 +468,7 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
         <div>
           <h1 className="page-title">Allocations</h1>
           <div className="page-sub">
-            {loading ? "Loading…" : `${users.length} engineers · ${WEEK_OPTIONS.find((o) => o.value === activeWeeks)?.label ?? `${activeWeeks} weeks`}`}
+            {loading ? "Loading…" : `${visibleUsers.length} engineers · ${WEEK_OPTIONS.find((o) => o.value === activeWeeks)?.label ?? `${activeWeeks} weeks`}`}
           </div>
         </div>
         <div className="page-actions">
@@ -483,6 +497,12 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
             <select className="select-sm" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
               <option value="">All roles</option>
               {roleOptions.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          )}
+          {pmOptions.length > 0 && (
+            <select className="select-sm" value={pmFilter} onChange={(e) => { setPmFilter(e.target.value); }}>
+              <option value="">All managers</option>
+              {pmOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           )}
           <div className="seg">
@@ -525,7 +545,7 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
         <div className="kpi">
           <div className="kpi-label">Team capacity · {weeks.length} wks</div>
           <div className="kpi-value">{grandCap}<span className="unit">h</span></div>
-          <div className="kpi-meta">Across {users.length} engineers</div>
+          <div className="kpi-meta">Across {visibleUsers.length} engineers</div>
         </div>
         <div className={`kpi ${grandPct > 100 ? "bad" : grandPct >= 90 ? "warn" : ""}`}>
           <div className="kpi-label">Demand</div>

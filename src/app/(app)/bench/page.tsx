@@ -12,7 +12,7 @@ export default async function BenchPage() {
   const day30 = new Date(today);
   day30.setDate(today.getDate() + 30);
 
-  const [users, allocToday, alloc30, divisions] = await Promise.all([
+  const [allActiveUsers, allocToday, alloc30, divisions] = await Promise.all([
     getCachedSimpleUsers(),
     prisma.allocation.findMany({
       where:   { startDate: { lte: today }, endDate: { gte: today } },
@@ -25,6 +25,9 @@ export default async function BenchPage() {
     }),
     getCachedDivisions(),
   ]);
+
+  // Exclude onshore resources from bench entirely
+  const users = allActiveUsers.filter((u) => !u.isOnshore);
 
   // Today's bench — full data with project chips
   const bench = users
@@ -61,7 +64,7 @@ export default async function BenchPage() {
     <BenchClient
       bench={bench}
       bench30={bench30}
-      allUsers={users.map((u) => ({ id: u.id, name: u.name, email: u.email, capacity: u.capacity, role: u.role, jobTitle: u.jobTitle, divisionId: u.divisionId }))}
+      allUsers={users.map((u) => ({ id: u.id, name: u.name, email: u.email, capacity: u.capacity, role: u.role, jobTitle: u.jobTitle, department: u.department, divisionId: u.divisionId }))}
       divisions={divisions.map((d) => ({ id: d.id, name: d.name, code: d.code, color: d.color }))}
     />
   );

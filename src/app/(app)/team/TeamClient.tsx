@@ -18,6 +18,7 @@ type TeamMember = {
   capacity:   number;
   department: string | null;
   isActive:   boolean;
+  isOnshore:  boolean;
   divisionId: string | null;
   createdAt:  string;
   division:   DivisionRef | null;
@@ -44,7 +45,7 @@ const ROLE_LABELS: Record<string, string> = {
 const EMPTY_FORM = {
   name: "", email: "", role: "MEMBER" as string,
   jobTitle: "", capacity: 40, department: "",
-  divisionId: "", isActive: true,
+  divisionId: "", isActive: true, isOnshore: false,
 };
 
 function initials(name: string | null, email: string | null) {
@@ -101,7 +102,7 @@ export function TeamClient({ users: initial, divisions, jobTitles }: Props) {
       name: u.name ?? "", email: u.email ?? "",
       role: u.role, jobTitle: u.jobTitle ?? "",
       capacity: u.capacity, department: u.department ?? "",
-      divisionId: u.divisionId ?? "", isActive: u.isActive,
+      divisionId: u.divisionId ?? "", isActive: u.isActive, isOnshore: u.isOnshore,
     });
     setError(null);
     setShowModal(true);
@@ -123,6 +124,7 @@ export function TeamClient({ users: initial, divisions, jobTitles }: Props) {
         department: form.department.trim() || null,
         divisionId: form.divisionId || null,
         isActive:   form.isActive,
+        isOnshore:  form.isOnshore,
       };
       if (!editTarget) payload.email = form.email.trim();
 
@@ -380,6 +382,19 @@ export function TeamClient({ users: initial, divisions, jobTitles }: Props) {
                   <span>Active</span>
                 </label>
               )}
+              <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8, gridColumn: "1/-1" }}>
+                <input
+                  type="checkbox"
+                  checked={form.isOnshore}
+                  onChange={(e) => setForm({ ...form, isOnshore: e.target.checked })}
+                />
+                <div>
+                  <span style={{ fontWeight: 500 }}>On shore resource</span>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
+                    Onshore resources are excluded from the bench report
+                  </div>
+                </div>
+              </label>
             </div>
 
             {error && <div style={{ marginTop: 14, color: "var(--danger, #ef4444)", fontSize: 13 }}>{error}</div>}

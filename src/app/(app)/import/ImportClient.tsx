@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useSession } from "next-auth/react";
 
 // ─── Legacy allocation import ────────────────────────────────────────────────
@@ -479,62 +479,441 @@ function RMImport() {
   return null;
 }
 
-// ─── Weekly batch upload ─────────────────────────────────────────────────────
+// ─── Standalone Projects import ──────────────────────────────────────────────
 
-function WeeklyUpload() {
+type ProjectsImportPhase = "idle" | "preview" | "confirming" | "done";
+
+type ProjImportRow = {
+  projectId: string;
+  name: string;
+  status: string;
+  directorId: string;
+  startDate?: string;
+  endDate?: string;
+};
+
+function ProjectsImport() {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [file,        setFile]        = useState<File | null>(null);
-  const [batchLabel,  setBatchLabel]  = useState(`RM Week — ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`);
-  const [phase,       setPhase]       = useState<"idle" | "preview" | "confirming" | "done">("idle");
-  const [parseError,  setParseError]  = useState("");
-  const [preview,     setPreview]     = useState<{ total: number; wouldCreate: number; wouldUpdate: number; errors: { row: number; message: string }[] } | null>(null);
-  const [result,      setResult]      = useState<{ created: number; errors: { row: number; message: string }[] } | null>(null);
-  const [rows,        setRows]        = useState<{ employeeId: string; projectId: string; allocation: number; startDate: string; endDate: string }[]>([]);
+  const [file,       setFile]       = useState<File | null>(null);
+  const [phase,      setPhase]      = useState<ProjectsImportPhase>("idle");
+  const [parseError, setParseError] = useState("");
+  const [rows,       setRows]       = useState<ProjImportRow[]>([]);
+  const [result,     setResult]     = useState<{ created: number; updated: number; errors: { projectId: string; message: string }[] } | null>(null);
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
     setFile(f);
     setParseError("");
+    setRows([]);
+    setPhase("idle");
+  }
+
+  function handleParse() {
+    if (!file) { setParseError("Please select a Projects CSV file."); return; }
+    setParseError("");
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const { rows: csvRows } = parseCsvText(ev.target?.result as string);
+        const required = ["ProjectID", "Project", "Status", "DirectorID"];
+        const sampleHeaders = csvRows.length > 0 ? Object.keys(csvRows[0]) : [];
+        const missing = required.filter((h) => !sampleHeaders.includes(h));
+        if (missing.length > 0) { setParseError(`Missing columns: ${missing.join(", ")}`); return; }
+        const parsed: ProjImportRow[] = csvRows
+          .filter((r) => r["ProjectID"]?.trim())
+          .map((r) => ({
+            projectId:  r["ProjectID"].trim(),
+            name:       r["Project"]?.trim() ?? "",
+            status:     r["Status"]?.trim() ?? "Active",
+            directorId: r["DirectorID"]?.trim() ?? "",
+            startDate:  r["Start Date"]?.trim() || undefined,
+            endDate:    r["End Date"]?.trim() || undefined,
+          }));
+        if (parsed.length === 0) { setParseError("No valid rows found."); return; }
+        setRows(parsed);
+        setPhase("preview");
+      } catch { setParseError("Failed to parse CSV."); }
+    };
+    reader.readAsText(file);
+  }
+
+  async function handleConfirm() {
+    setPhase("confirming");
+    try {
+      const res  = await fetch("/api/import/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows }) });
+      const data = await res.json() as { created?: number; updated?: number; errors?: { projectId: string; message: string }[] };
+      setResult({ created: data.created ?? 0, updated: data.updated ?? 0, errors: data.errors ?? [] });
+      setPhase("done");
+    } catch (e) {
+      setParseError(`Import failed: ${String(e)}`);
+      setPhase("preview");
+    }
+  }
+
+  function reset() { setPhase("idle"); setFile(null); setRows([]); setResult(null); setParseError(""); }
+
+  return (
+    <div className="card" style={{ maxWidth: 600 }}>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>Import projects from CSV</div>
+      <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
+        Upload your <code>Projects File.csv</code>. Required columns: <code>ProjectID</code>, <code>Project</code>, <code>Status</code>, <code>DirectorID</code>.
+        Optional: <code>Start Date</code>, <code>End Date</code> (YYYY.MM.DD).
+      </p>
+
+      {phase !== "done" && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Projects CSV</div>
+          <input ref={fileRef} type="file" accept=".csv,.txt" style={{ display: "none" }} onChange={handleFile} />
+          <div className="row" style={{ gap: 8, alignItems: "center" }}>
+            <button type="button" className="btn" onClick={() => fileRef.current?.click()}>Choose file</button>
+            <span style={{ fontSize: 13, color: file ? "var(--ok)" : "var(--text-muted)" }}>{file ? `✓ ${file.name}` : "No file chosen"}</span>
+          </div>
+        </div>
+      )}
+
+      {parseError && <div style={{ color: "var(--bad)", fontSize: 13, marginBottom: 10 }}>{parseError}</div>}
+
+      {phase === "idle" && (
+        <button className="btn primary" onClick={handleParse} disabled={!file}>Parse file</button>
+      )}
+
+      {phase === "preview" && (
+        <>
+          <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 10 }}>{rows.length} projects found</div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 14 }}>
+            <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
+              {["#", "ID", "Name", "Status", "Director ID", "Start", "End"].map((h) => (
+                <th key={h} style={{ textAlign: "left", padding: "5px 8px", color: "var(--text-muted)", fontWeight: 500 }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {rows.slice(0, 10).map((r, i) => (
+                <tr key={i} style={{ borderBottom: "1px solid var(--border-faint)" }}>
+                  <td style={{ padding: "5px 8px", color: "var(--text-muted)" }}>{i + 1}</td>
+                  <td style={{ padding: "5px 8px", fontFamily: "var(--mono)" }}>{r.projectId}</td>
+                  <td style={{ padding: "5px 8px" }}>{r.name}</td>
+                  <td style={{ padding: "5px 8px" }}>{r.status}</td>
+                  <td style={{ padding: "5px 8px", fontFamily: "var(--mono)" }}>{r.directorId}</td>
+                  <td style={{ padding: "5px 8px", fontFamily: "var(--mono)" }}>{r.startDate ?? "—"}</td>
+                  <td style={{ padding: "5px 8px", fontFamily: "var(--mono)" }}>{r.endDate ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rows.length > 10 && <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>…and {rows.length - 10} more</p>}
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn" onClick={() => setPhase("idle")}>Back</button>
+            <button className="btn primary" onClick={handleConfirm}>Import {rows.length} projects</button>
+          </div>
+        </>
+      )}
+
+      {phase === "confirming" && <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Importing…</div>}
+
+      {phase === "done" && result && (
+        <>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>{result.errors.length === 0 ? "✓" : "⚠"}</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>{result.created} created, {result.updated} updated</div>
+          {result.errors.length > 0 && (
+            <details style={{ marginBottom: 12 }}>
+              <summary style={{ fontSize: 13, cursor: "pointer", color: "var(--bad)" }}>{result.errors.length} errors</summary>
+              <div style={{ marginTop: 6 }}>
+                {result.errors.map((e, i) => (
+                  <div key={i} style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 2 }}>{e.projectId}: {e.message}</div>
+                ))}
+              </div>
+            </details>
+          )}
+          <button className="btn" style={{ marginTop: 8 }} onClick={reset}>Import more</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Standalone Employees import ──────────────────────────────────────────────
+
+type EmpImportPhase = "idle" | "preview" | "confirming" | "done";
+
+type EmpImportRow = {
+  fomsId: string;
+  name: string;
+  email: string;
+  rmRole: string;
+  position: string;
+};
+
+function EmployeesImport() {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [file,       setFile]       = useState<File | null>(null);
+  const [phase,      setPhase]      = useState<EmpImportPhase>("idle");
+  const [parseError, setParseError] = useState("");
+  const [rows,       setRows]       = useState<EmpImportRow[]>([]);
+  const [result,     setResult]     = useState<{ created: number; skipped: number; errors: { fomsId: string; message: string }[] } | null>(null);
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    setParseError("");
+    setRows([]);
+    setPhase("idle");
+  }
+
+  function handleParse() {
+    if (!file) { setParseError("Please select an Employee CSV file."); return; }
+    setParseError("");
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const { rows: csvRows } = parseCsvText(ev.target?.result as string);
+        const required = ["FomsId", "Employee", "Email"];
+        const sampleHeaders = csvRows.length > 0 ? Object.keys(csvRows[0]) : [];
+        const missing = required.filter((h) => !sampleHeaders.includes(h));
+        if (missing.length > 0) { setParseError(`Missing columns: ${missing.join(", ")}`); return; }
+        const parsed: EmpImportRow[] = csvRows
+          .filter((r) => r["FomsId"]?.trim() && r["Email"]?.trim())
+          .map((r) => ({
+            fomsId:   r["FomsId"].trim(),
+            name:     r["Employee"]?.trim() ?? "",
+            email:    r["Email"].trim(),
+            rmRole:   r["Role"]?.trim() ?? "",
+            position: r["Position"]?.trim() ?? "",
+          }));
+        if (parsed.length === 0) { setParseError("No valid rows found (FomsId and Email are required)."); return; }
+        setRows(parsed);
+        setPhase("preview");
+      } catch { setParseError("Failed to parse CSV."); }
+    };
+    reader.readAsText(file);
+  }
+
+  async function handleConfirm() {
+    setPhase("confirming");
+    try {
+      const res  = await fetch("/api/import/employees", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows }) });
+      const data = await res.json() as { created?: number; skipped?: number; errors?: { fomsId: string; message: string }[] };
+      setResult({ created: data.created ?? 0, skipped: data.skipped ?? 0, errors: data.errors ?? [] });
+      setPhase("done");
+    } catch (e) {
+      setParseError(`Import failed: ${String(e)}`);
+      setPhase("preview");
+    }
+  }
+
+  function reset() { setPhase("idle"); setFile(null); setRows([]); setResult(null); setParseError(""); }
+
+  return (
+    <div className="card" style={{ maxWidth: 640 }}>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>Import employees from CSV</div>
+      <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
+        Upload your <code>Employee_RM.csv</code>. Required columns: <code>FomsId</code>, <code>Employee</code>, <code>Email</code>.
+        Optional: <code>Role</code> (sets department), <code>Position</code> (sets job title).
+        Division assignment is skipped — use Full RM Migration to assign divisions via director data.
+      </p>
+
+      {phase !== "done" && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Employee CSV</div>
+          <input ref={fileRef} type="file" accept=".csv,.txt" style={{ display: "none" }} onChange={handleFile} />
+          <div className="row" style={{ gap: 8, alignItems: "center" }}>
+            <button type="button" className="btn" onClick={() => fileRef.current?.click()}>Choose file</button>
+            <span style={{ fontSize: 13, color: file ? "var(--ok)" : "var(--text-muted)" }}>{file ? `✓ ${file.name}` : "No file chosen"}</span>
+          </div>
+        </div>
+      )}
+
+      {parseError && <div style={{ color: "var(--bad)", fontSize: 13, marginBottom: 10 }}>{parseError}</div>}
+
+      {phase === "idle" && (
+        <button className="btn primary" onClick={handleParse} disabled={!file}>Parse file</button>
+      )}
+
+      {phase === "preview" && (
+        <>
+          <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 10 }}>{rows.length} employees found</div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 14 }}>
+            <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
+              {["#", "FomsId", "Name", "Email", "Role", "Position"].map((h) => (
+                <th key={h} style={{ textAlign: "left", padding: "5px 8px", color: "var(--text-muted)", fontWeight: 500 }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {rows.slice(0, 10).map((r, i) => (
+                <tr key={i} style={{ borderBottom: "1px solid var(--border-faint)" }}>
+                  <td style={{ padding: "5px 8px", color: "var(--text-muted)" }}>{i + 1}</td>
+                  <td style={{ padding: "5px 8px", fontFamily: "var(--mono)" }}>{r.fomsId}</td>
+                  <td style={{ padding: "5px 8px" }}>{r.name}</td>
+                  <td style={{ padding: "5px 8px" }}>{r.email}</td>
+                  <td style={{ padding: "5px 8px" }}>{r.rmRole}</td>
+                  <td style={{ padding: "5px 8px" }}>{r.position}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rows.length > 10 && <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>…and {rows.length - 10} more</p>}
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn" onClick={() => setPhase("idle")}>Back</button>
+            <button className="btn primary" onClick={handleConfirm}>Import {rows.length} employees</button>
+          </div>
+        </>
+      )}
+
+      {phase === "confirming" && <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Importing…</div>}
+
+      {phase === "done" && result && (
+        <>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>{result.errors.length === 0 ? "✓" : "⚠"}</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>{result.created} created, {result.skipped} updated/skipped</div>
+          {result.errors.length > 0 && (
+            <details style={{ marginBottom: 12 }}>
+              <summary style={{ fontSize: 13, cursor: "pointer", color: "var(--bad)" }}>{result.errors.length} errors</summary>
+              <div style={{ marginTop: 6 }}>
+                {result.errors.map((e, i) => (
+                  <div key={i} style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 2 }}>{e.fomsId}: {e.message}</div>
+                ))}
+              </div>
+            </details>
+          )}
+          <button className="btn" style={{ marginTop: 8 }} onClick={reset}>Import more</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Weekly batch upload ─────────────────────────────────────────────────────
+
+type WeeklyRow = {
+  employeeId:  string;
+  empName:     string;
+  projectId:   string;
+  projectName: string;
+  directorId:  string;
+  allocation:  number;
+  startDate:   string;
+  endDate:     string;
+};
+
+type AutoCreated = { externalId: string; name: string };
+
+type PreviewData = {
+  total:                number;
+  wouldCreate:          number;
+  wouldUpdate:          number;
+  employeesWouldCreate: AutoCreated[];
+  projectsWouldCreate:  AutoCreated[];
+  errors:               { row: number; message: string }[];
+};
+
+type ImportResult = {
+  created:             number;
+  updated:             number;
+  employeesAutoCreated: AutoCreated[];
+  projectsAutoCreated:  AutoCreated[];
+  errors:              { row: number; message: string }[];
+};
+
+function WeeklyUpload() {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [file,        setFile]        = useState<File | null>(null);
+  const [batchLabel,  setBatchLabel]  = useState(`RM Week — ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`);
+  const [phase,       setPhase]       = useState<"idle" | "previewing" | "preview" | "confirming" | "done">("idle");
+  const [fileError,   setFileError]   = useState("");
+  const [parseError,  setParseError]  = useState("");
+  const [preview,     setPreview]     = useState<PreviewData | null>(null);
+  const [result,      setResult]      = useState<ImportResult | null>(null);
+  const [rows,        setRows]        = useState<WeeklyRow[]>([]);
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!f.name.toLowerCase().endsWith(".csv")) {
+      setFileError("Only .csv files are accepted.");
+      e.target.value = "";
+      return;
+    }
+    setFileError("");
+    setFile(f);
+    setParseError("");
     setPreview(null);
     setPhase("idle");
+  }
+
+  function clearFile() {
+    setFile(null);
+    setFileError("");
+    setParseError("");
+    setPreview(null);
+    setPhase("idle");
+    if (fileRef.current) fileRef.current.value = "";
   }
 
   async function handlePreview() {
     if (!file) { setParseError("Please select RM - Data.csv"); return; }
     setParseError("");
+    setPhase("previewing");
 
-    const text = await new Promise<string>((res, rej) => {
-      const r = new FileReader();
-      r.onload  = (e) => res(e.target?.result as string);
-      r.onerror = rej;
-      r.readAsText(file);
-    });
+    let text: string;
+    try {
+      text = await new Promise<string>((res, rej) => {
+        const r = new FileReader();
+        r.onload  = (e) => res(e.target?.result as string);
+        r.onerror = rej;
+        r.readAsText(file);
+      });
+    } catch {
+      setParseError("Failed to read file.");
+      setPhase("idle");
+      return;
+    }
 
     const { rows: csvRows } = parseCsvText(text);
-    const parsed = csvRows
+    const parsed: WeeklyRow[] = csvRows
       .filter((r) => r["Employee ID"]?.trim() && r["Project ID"]?.trim())
       .map((r) => ({
-        employeeId: r["Employee ID"].trim(),
-        projectId:  r["Project ID"].trim(),
-        allocation: parseFloat(r["Allocation %"] ?? "0"),
-        startDate:  r["start Dte"]?.trim() ?? "",
-        endDate:    r["End Date"]?.trim() ?? "",
+        employeeId:  r["Employee ID"].trim(),
+        empName:     r["Emp Name"]?.trim() ?? "",
+        projectId:   r["Project ID"].trim(),
+        projectName: r["Project Name"]?.trim() ?? "",
+        directorId:  r["Director ID"]?.trim() ?? "",
+        allocation:  parseFloat(r["Allocation %"] ?? "0"),
+        startDate:   r["start Dte"]?.trim() ?? "",
+        endDate:     r["End Date"]?.trim() ?? "",
       }));
     setRows(parsed);
 
-    // Dry-run to get create/update/error counts
+    // Dry-run to get create/update/auto-create/error counts
     try {
       const res  = await fetch("/api/import/allocations", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ label: batchLabel, sourceFile: file.name, dryRun: true, rows: parsed }),
       });
-      const data = await res.json() as { data?: { wouldCreate: number; wouldUpdate: number; errors: { row: number; message: string }[] } };
-      const d    = data.data ?? { wouldCreate: 0, wouldUpdate: 0, errors: [] };
-      setPreview({ total: parsed.length, wouldCreate: d.wouldCreate, wouldUpdate: d.wouldUpdate, errors: d.errors });
+      const text = await res.text();
+      let data: { wouldCreate?: number; wouldUpdate?: number; employeesWouldCreate?: AutoCreated[]; projectsWouldCreate?: AutoCreated[]; errors?: { row: number; message: string }[]; error?: string } = {};
+      try { data = JSON.parse(text); } catch {
+        setParseError(`Preview failed: server error (${res.status}). Check the server logs.`);
+        setPhase("idle");
+        return;
+      }
+      if (!res.ok) {
+        setParseError(data.error ?? "Preview failed — check your permissions.");
+        setPhase("idle");
+        return;
+      }
+      setPreview({
+        total:                parsed.length,
+        wouldCreate:          data.wouldCreate          ?? 0,
+        wouldUpdate:          data.wouldUpdate          ?? 0,
+        employeesWouldCreate: data.employeesWouldCreate ?? [],
+        projectsWouldCreate:  data.projectsWouldCreate  ?? [],
+        errors:               data.errors               ?? [],
+      });
       setPhase("preview");
     } catch (e) {
       setParseError(`Preview failed: ${String(e)}`);
+      setPhase("idle");
     }
   }
 
@@ -546,8 +925,25 @@ function WeeklyUpload() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ label: batchLabel, sourceFile: file.name, rows }),
       });
-      const data = await res.json() as { data?: { created: number; errors: { row: number; message: string }[] } };
-      setResult({ created: data.data?.created ?? 0, errors: data.data?.errors ?? [] });
+      const text = await res.text();
+      let data: { created?: number; updated?: number; employeesAutoCreated?: AutoCreated[]; projectsAutoCreated?: AutoCreated[]; errors?: { row: number; message: string }[]; error?: string } = {};
+      try { data = JSON.parse(text); } catch {
+        setParseError(`Import failed: server error (${res.status}). Check the server logs.`);
+        setPhase("preview");
+        return;
+      }
+      if (!res.ok) {
+        setParseError(data.error ?? `Import failed with status ${res.status}.`);
+        setPhase("preview");
+        return;
+      }
+      setResult({
+        created:              data.created              ?? 0,
+        updated:              data.updated              ?? 0,
+        employeesAutoCreated: data.employeesAutoCreated ?? [],
+        projectsAutoCreated:  data.projectsAutoCreated  ?? [],
+        errors:               data.errors               ?? [],
+      });
       setPhase("done");
     } catch (e) {
       setParseError(`Import failed: ${String(e)}`);
@@ -572,7 +968,7 @@ function WeeklyUpload() {
         <input
           ref={fileRef}
           type="file"
-          accept=".csv,.txt"
+          accept=".csv"
           style={{ display: "none" }}
           onChange={handleFile}
         />
@@ -580,44 +976,147 @@ function WeeklyUpload() {
           <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
             Choose file
           </button>
-          <span style={{ fontSize: 13, color: file ? "var(--ok)" : "var(--text-muted)" }}>
-            {file ? `✓ ${file.name}` : "No file chosen"}
-          </span>
+          {file ? (
+            <>
+              <span style={{ fontSize: 13, color: "var(--ok)" }}>✓ {file.name}</span>
+              <button
+                type="button"
+                onClick={clearFile}
+                style={{ fontSize: 13, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1 }}
+                title="Remove file"
+              >
+                ✕
+              </button>
+            </>
+          ) : (
+            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>No file chosen</span>
+          )}
         </div>
+        {fileError && <div style={{ color: "var(--bad)", fontSize: 12, marginTop: 6 }}>{fileError}</div>}
       </div>
 
       {parseError && <div style={{ color: "var(--bad)", fontSize: 13, marginBottom: 10 }}>{parseError}</div>}
 
-      {phase === "idle" && (
-        <button className="btn primary" onClick={handlePreview} disabled={!file}>Preview</button>
+      {(phase === "idle" || phase === "previewing") && (
+        <button className="btn primary" onClick={handlePreview} disabled={!file || phase === "previewing"}>
+          {phase === "previewing" ? "Loading preview…" : "Preview"}
+        </button>
       )}
 
       {phase === "preview" && preview && (
         <>
           <div style={{ background: "var(--surface-2)", borderRadius: 8, padding: "12px 14px", marginBottom: 16 }}>
-            {[
-              ["Total rows parsed", preview.total],
-              ["Will be created",   preview.wouldCreate],
-              ["Will be updated",   preview.wouldUpdate],
-              ["Errors",            preview.errors.length],
-            ].map(([label, val]) => (
-              <div key={label as string} className="row" style={{ justifyContent: "space-between", padding: "4px 0" }}>
+            {([
+              ["Total rows",                preview.total,                           ""],
+              ["Allocations to create",     preview.wouldCreate,                     ""],
+              ["Allocations to update",     preview.wouldUpdate,                     ""],
+              ["Employees to auto-create",  preview.employeesWouldCreate.length,     "var(--accent)"],
+              ["Projects to auto-create",   preview.projectsWouldCreate.length,      "var(--accent)"],
+              ["Rows with errors",          preview.errors.length,                   preview.errors.length > 0 ? "var(--bad)" : ""],
+            ] as [string, number, string][]).map(([label, val, color]) => (
+              <div key={label} className="row" style={{ justifyContent: "space-between", padding: "4px 0" }}>
                 <span style={{ fontSize: 13 }}>{label}</span>
-                <span style={{ fontFamily: "var(--mono)", fontWeight: 600, color: label === "Errors" && (val as number) > 0 ? "var(--bad)" : undefined }}>{val}</span>
+                <span style={{ fontFamily: "var(--mono)", fontWeight: 600, color: color || undefined }}>{val}</span>
               </div>
             ))}
           </div>
-          {preview.errors.length > 0 && (
-            <details style={{ marginBottom: 12 }}>
-              <summary style={{ fontSize: 12, cursor: "pointer", color: "var(--bad)" }}>{preview.errors.length} errors — click to expand</summary>
-              <div style={{ marginTop: 6 }}>
-                {preview.errors.slice(0, 20).map((e, i) => (
-                  <div key={i} style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 2 }}>Row {e.row}: {e.message}</div>
+          {/* Auto-create previews */}
+          {preview.employeesWouldCreate.length > 0 && (
+            <details style={{ marginBottom: 10 }}>
+              <summary style={{ fontSize: 12, cursor: "pointer", color: "var(--accent)", marginBottom: 4 }}>
+                {preview.employeesWouldCreate.length} new employee{preview.employeesWouldCreate.length > 1 ? "s" : ""} will be created — click to preview
+              </summary>
+              <div style={{ marginTop: 6, maxHeight: 160, overflowY: "auto" }}>
+                {preview.employeesWouldCreate.map((e) => (
+                  <div key={e.externalId} style={{ fontSize: 12, padding: "2px 0", display: "flex", gap: 8 }}>
+                    <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)", minWidth: 60 }}>{e.externalId}</span>
+                    <span>{e.name}</span>
+                  </div>
                 ))}
-                {preview.errors.length > 20 && <div style={{ fontSize: 12, color: "var(--text-muted)" }}>…and {preview.errors.length - 20} more</div>}
               </div>
             </details>
           )}
+          {preview.projectsWouldCreate.length > 0 && (
+            <details style={{ marginBottom: 10 }}>
+              <summary style={{ fontSize: 12, cursor: "pointer", color: "var(--accent)", marginBottom: 4 }}>
+                {preview.projectsWouldCreate.length} new project{preview.projectsWouldCreate.length > 1 ? "s" : ""} will be created — click to preview
+              </summary>
+              <div style={{ marginTop: 6, maxHeight: 160, overflowY: "auto" }}>
+                {preview.projectsWouldCreate.map((p) => (
+                  <div key={p.externalId} style={{ fontSize: 12, padding: "2px 0", display: "flex", gap: 8 }}>
+                    <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)", minWidth: 60 }}>{p.externalId}</span>
+                    <span>{p.name}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+
+          {preview.errors.length > 0 && (() => {
+            const missingEmployees = new Set<string>();
+            const missingProjects  = new Set<string>();
+            for (const e of preview.errors) {
+              const m = e.message.match(/externalId=(\S+)/);
+              if (e.message.startsWith("Employee not found") && m) missingEmployees.add(m[1]);
+              if (e.message.startsWith("Project not found")  && m) missingProjects.add(m[1]);
+            }
+            return (
+              <div style={{ marginBottom: 12 }}>
+                {/* How-to-fix callout */}
+                <div style={{ background: "#fff8e1", border: "1px solid #f0b429", borderRadius: 8, padding: "10px 14px", marginBottom: 10, fontSize: 12 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>These rows will be skipped — here's how to fix them</div>
+                  {missingProjects.size > 0 && (
+                    <div style={{ marginBottom: 4 }}>
+                      <strong>{missingProjects.size} project{missingProjects.size > 1 ? "s" : ""} not found</strong>
+                      {" "}(IDs: {[...missingProjects].join(", ")}) — go to the <strong>Projects</strong> tab and import your Projects CSV first, then re-upload this file.
+                    </div>
+                  )}
+                  {missingEmployees.size > 0 && (
+                    <div>
+                      <strong>{missingEmployees.size} employee{missingEmployees.size > 1 ? "s" : ""} not found</strong>
+                      {" "}(IDs: {[...missingEmployees].join(", ")}) — go to the <strong>Employees</strong> tab and import your Employee CSV first, then re-upload this file.
+                    </div>
+                  )}
+                </div>
+                {/* Error detail table */}
+                <details>
+                  <summary style={{ fontSize: 12, cursor: "pointer", color: "var(--bad)", marginBottom: 6 }}>
+                    {preview.errors.length} skipped row{preview.errors.length > 1 ? "s" : ""} — click to see details
+                  </summary>
+                  <div style={{ marginTop: 8, overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                          {["Row", "Employee ID", "Project ID", "Start", "End", "Issue"].map((h) => (
+                            <th key={h} style={{ textAlign: "left", padding: "4px 8px", color: "var(--text-muted)", fontWeight: 500, whiteSpace: "nowrap" }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.errors.slice(0, 30).map((e, i) => {
+                          const row = rows[e.row - 1];
+                          const isEmpErr = e.message.startsWith("Employee");
+                          return (
+                            <tr key={i} style={{ borderBottom: "1px solid var(--border-faint)" }}>
+                              <td style={{ padding: "4px 8px", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{e.row}</td>
+                              <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono)", color: isEmpErr ? "var(--bad)" : undefined }}>{row?.employeeId ?? "—"}</td>
+                              <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono)", color: !isEmpErr ? "var(--bad)" : undefined }}>{row?.projectId ?? "—"}</td>
+                              <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono)" }}>{row?.startDate ?? "—"}</td>
+                              <td style={{ padding: "4px 8px", fontFamily: "var(--font-mono)" }}>{row?.endDate ?? "—"}</td>
+                              <td style={{ padding: "4px 8px", color: "var(--bad)" }}>{e.message}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {preview.errors.length > 30 && (
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", padding: "6px 8px" }}>…and {preview.errors.length - 30} more</div>
+                    )}
+                  </div>
+                </details>
+              </div>
+            );
+          })()}
           <div className="row" style={{ gap: 8 }}>
             <button className="btn" onClick={() => setPhase("idle")}>Back</button>
             <button className="btn primary" onClick={handleConfirm}>Confirm &amp; import</button>
@@ -632,13 +1131,255 @@ function WeeklyUpload() {
       {phase === "done" && result && (
         <>
           <div style={{ fontSize: 28, marginBottom: 8 }}>{result.errors.length === 0 ? "✓" : "⚠"}</div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>{result.created} allocations imported</div>
-          {result.errors.length > 0 && (
-            <div style={{ fontSize: 13, color: "var(--bad)", marginBottom: 8 }}>{result.errors.length} errors</div>
+          <div style={{ fontWeight: 600, marginBottom: 12 }}>Import complete</div>
+
+          {/* Stats */}
+          <div style={{ background: "var(--surface-2)", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
+            {([
+              ["Allocations created",    result.created,                    ""],
+              ["Allocations updated",    result.updated,                    ""],
+              ["Employees auto-created", result.employeesAutoCreated.length, result.employeesAutoCreated.length > 0 ? "var(--ok)" : ""],
+              ["Projects auto-created",  result.projectsAutoCreated.length,  result.projectsAutoCreated.length  > 0 ? "var(--ok)" : ""],
+              ["Errors",                 result.errors.length,               result.errors.length > 0 ? "var(--bad)" : ""],
+            ] as [string, number, string][]).map(([label, val, color]) => (
+              <div key={label} className="row" style={{ justifyContent: "space-between", padding: "3px 0" }}>
+                <span style={{ fontSize: 13 }}>{label}</span>
+                <span style={{ fontFamily: "var(--mono)", fontWeight: 600, color: color || undefined }}>{val}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Auto-created employees */}
+          {result.employeesAutoCreated.length > 0 && (
+            <details style={{ marginBottom: 10 }}>
+              <summary style={{ fontSize: 12, cursor: "pointer", color: "var(--ok)" }}>
+                {result.employeesAutoCreated.length} employees auto-created — click to see
+              </summary>
+              <div style={{ marginTop: 6, maxHeight: 160, overflowY: "auto" }}>
+                {result.employeesAutoCreated.map((e) => (
+                  <div key={e.externalId} style={{ fontSize: 12, padding: "2px 0", display: "flex", gap: 8 }}>
+                    <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)", minWidth: 60 }}>{e.externalId}</span>
+                    <span>{e.name}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
           )}
-          <button className="btn" onClick={() => { setPhase("idle"); setFile(null); setPreview(null); setResult(null); setRows([]); }}>Upload another</button>
+
+          {/* Auto-created projects */}
+          {result.projectsAutoCreated.length > 0 && (
+            <details style={{ marginBottom: 10 }}>
+              <summary style={{ fontSize: 12, cursor: "pointer", color: "var(--ok)" }}>
+                {result.projectsAutoCreated.length} projects auto-created — click to see
+              </summary>
+              <div style={{ marginTop: 6, maxHeight: 160, overflowY: "auto" }}>
+                {result.projectsAutoCreated.map((p) => (
+                  <div key={p.externalId} style={{ fontSize: 12, padding: "2px 0", display: "flex", gap: 8 }}>
+                    <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-muted)", minWidth: 60 }}>{p.externalId}</span>
+                    <span>{p.name}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+
+          {/* Errors */}
+          {result.errors.length > 0 && (
+            <details style={{ marginBottom: 10 }}>
+              <summary style={{ fontSize: 12, cursor: "pointer", color: "var(--bad)" }}>
+                {result.errors.length} rows skipped — click to see
+              </summary>
+              <div style={{ marginTop: 6 }}>
+                {result.errors.slice(0, 20).map((e, i) => (
+                  <div key={i} style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 2 }}>Row {e.row}: {e.message}</div>
+                ))}
+                {result.errors.length > 20 && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>…and {result.errors.length - 20} more</div>}
+              </div>
+            </details>
+          )}
+
+          <button className="btn" onClick={() => { setPhase("idle"); setFile(null); setPreview(null); setResult(null); setRows([]); if (fileRef.current) fileRef.current.value = ""; }}>
+            Upload another
+          </button>
         </>
       )}
+    </div>
+  );
+}
+
+// ─── Import History ───────────────────────────────────────────────────────────
+
+type BatchLog = {
+  uploadedBy:           string;
+  uploadedAt:           string;
+  totalRows:            number;
+  allocationsCreated:   number;
+  allocationsUpdated:   number;
+  employeesAutoCreated: AutoCreated[];
+  projectsAutoCreated:  AutoCreated[];
+  errors:               { row: number; message: string }[];
+};
+
+type BatchRecord = {
+  id:              string;
+  label:           string;
+  uploadedAt:      string;
+  isCurrent:       boolean;
+  sourceFile:      string;
+  allocationCount: number;
+  uploadedBy:      string;
+  log:             BatchLog | null;
+};
+
+function ImportHistory() {
+  const [batches,  setBatches]  = useState<BatchRecord[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/import/allocations/batches")
+      .then((r) => r.json())
+      .then((d) => { if (Array.isArray(d)) setBatches(d); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Loading…</div>;
+  if (batches.length === 0) return (
+    <div className="card" style={{ maxWidth: 560 }}>
+      <div style={{ fontSize: 13, color: "var(--text-muted)" }}>No import batches found. Run a Weekly Upload to get started.</div>
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth: 820 }}>
+      {batches.map((b) => {
+        const log      = b.log;
+        const isOpen   = expanded === b.id;
+        const hasLog   = !!log;
+        return (
+          <div key={b.id} className="card" style={{ marginBottom: 10, padding: 0, overflow: "hidden" }}>
+            {/* Header row */}
+            <div
+              style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", cursor: hasLog ? "pointer" : "default" }}
+              onClick={() => hasLog && setExpanded(isOpen ? null : b.id)}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{b.label}</span>
+                  {b.isCurrent && <span className="chip ok" style={{ fontSize: 10 }}>current</span>}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                  {new Date(b.uploadedAt).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  {" · "}{b.uploadedBy}
+                  {" · "}{b.sourceFile}
+                </div>
+              </div>
+
+              {/* Mini stats */}
+              <div style={{ display: "flex", gap: 16, flexShrink: 0 }}>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 16 }}>{b.allocationCount}</div>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase" }}>allocations</div>
+                </div>
+                {log && log.employeesAutoCreated.length > 0 && (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 16, color: "var(--ok)" }}>{log.employeesAutoCreated.length}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase" }}>new emp</div>
+                  </div>
+                )}
+                {log && log.projectsAutoCreated.length > 0 && (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 16, color: "var(--ok)" }}>{log.projectsAutoCreated.length}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase" }}>new proj</div>
+                  </div>
+                )}
+                {log && log.errors.length > 0 && (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 16, color: "var(--bad)" }}>{log.errors.length}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase" }}>skipped</div>
+                  </div>
+                )}
+              </div>
+
+              {hasLog && (
+                <span style={{ fontSize: 12, color: "var(--text-faint)", flexShrink: 0 }}>{isOpen ? "▲" : "▼"}</span>
+              )}
+            </div>
+
+            {/* Expanded log */}
+            {isOpen && log && (
+              <div style={{ borderTop: "1px solid var(--border)", padding: "12px 16px", background: "var(--surface-2)" }}>
+                {/* Summary grid */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8, marginBottom: 14 }}>
+                  {([
+                    ["Total rows",          log.totalRows,                    ""],
+                    ["Created",             log.allocationsCreated,           ""],
+                    ["Updated",             log.allocationsUpdated,           ""],
+                    ["Employees created",   log.employeesAutoCreated.length,  log.employeesAutoCreated.length > 0 ? "var(--ok)" : ""],
+                    ["Projects created",    log.projectsAutoCreated.length,   log.projectsAutoCreated.length  > 0 ? "var(--ok)" : ""],
+                    ["Skipped / errors",    log.errors.length,                log.errors.length > 0 ? "var(--bad)" : ""],
+                  ] as [string, number, string][]).map(([label, val, color]) => (
+                    <div key={label} style={{ background: "var(--surface)", borderRadius: 6, padding: "8px 10px" }}>
+                      <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 2 }}>{label}</div>
+                      <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 18, color: color || "var(--text)" }}>{val}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Auto-created employees */}
+                {log.employeesAutoCreated.length > 0 && (
+                  <details style={{ marginBottom: 8 }}>
+                    <summary style={{ fontSize: 12, cursor: "pointer", color: "var(--ok)", marginBottom: 4 }}>
+                      Auto-created employees ({log.employeesAutoCreated.length})
+                    </summary>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+                      {log.employeesAutoCreated.map((e) => (
+                        <span key={e.externalId} style={{ fontSize: 11, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 6px" }}>
+                          {e.name} <span style={{ color: "var(--text-muted)" }}>#{e.externalId}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </details>
+                )}
+
+                {/* Auto-created projects */}
+                {log.projectsAutoCreated.length > 0 && (
+                  <details style={{ marginBottom: 8 }}>
+                    <summary style={{ fontSize: 12, cursor: "pointer", color: "var(--ok)", marginBottom: 4 }}>
+                      Auto-created projects ({log.projectsAutoCreated.length})
+                    </summary>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+                      {log.projectsAutoCreated.map((p) => (
+                        <span key={p.externalId} style={{ fontSize: 11, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 6px" }}>
+                          {p.name} <span style={{ color: "var(--text-muted)" }}>#{p.externalId}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </details>
+                )}
+
+                {/* Skipped rows */}
+                {log.errors.length > 0 && (
+                  <details>
+                    <summary style={{ fontSize: 12, cursor: "pointer", color: "var(--bad)", marginBottom: 4 }}>
+                      Skipped rows ({log.errors.length})
+                    </summary>
+                    <div style={{ marginTop: 6, maxHeight: 200, overflowY: "auto" }}>
+                      {log.errors.slice(0, 30).map((e, i) => (
+                        <div key={i} style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 2 }}>
+                          Row {e.row}: {e.message}
+                        </div>
+                      ))}
+                      {log.errors.length > 30 && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>…and {log.errors.length - 30} more</div>}
+                    </div>
+                  </details>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -647,18 +1388,21 @@ function WeeklyUpload() {
 
 export function ImportClient() {
   const { data: session } = useSession();
-  const isAdmin        = session?.user?.role === "ADMIN";
-  const isDivOwner     = session?.user?.role === "DIVISION_OWNER";
+  const isAdmin         = session?.user?.role === "ADMIN";
+  const isDivOwner      = session?.user?.role === "DIVISION_OWNER";
   const canWeeklyUpload = isAdmin || isDivOwner;
-  const [tab, setTab] = useState<"weekly" | "rm" | "legacy">(
+  const [tab, setTab]   = useState<"weekly" | "history" | "projects" | "employees" | "rm" | "legacy">(
     canWeeklyUpload ? "weekly" : "legacy"
   );
 
-  type Tab = "weekly" | "rm" | "legacy";
+  type Tab = "weekly" | "history" | "projects" | "employees" | "rm" | "legacy";
   const tabs: { key: Tab; label: string; show: boolean }[] = [
-    { key: "weekly", label: "Weekly Upload",       show: canWeeklyUpload },
-    { key: "rm",     label: "Full RM Migration",   show: isAdmin },
-    { key: "legacy", label: "CSV Allocation Import", show: true },
+    { key: "weekly",    label: "Weekly Upload",         show: canWeeklyUpload },
+    { key: "history",   label: "Import History",        show: canWeeklyUpload },
+    { key: "projects",  label: "Projects",              show: isAdmin },
+    { key: "employees", label: "Employees",             show: isAdmin },
+    { key: "rm",        label: "Full RM Migration",     show: isAdmin },
+    { key: "legacy",    label: "CSV Allocation Import", show: true },
   ];
   const visibleTabs = tabs.filter((t) => t.show);
 
@@ -689,9 +1433,12 @@ export function ImportClient() {
         </div>
       )}
 
-      {tab === "weekly" && <WeeklyUpload />}
-      {tab === "rm"     && <RMImport />}
-      {tab === "legacy" && <LegacyImport />}
+      {tab === "weekly"    && <WeeklyUpload />}
+      {tab === "history"   && <ImportHistory />}
+      {tab === "projects"  && <ProjectsImport />}
+      {tab === "employees" && <EmployeesImport />}
+      {tab === "rm"        && <RMImport />}
+      {tab === "legacy"    && <LegacyImport />}
     </div>
   );
 }

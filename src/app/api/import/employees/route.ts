@@ -58,21 +58,18 @@ export async function POST(req: Request) {
     const { fomsId, name, email, rmRole, position = "", dominantDirectorId } = row;
 
     try {
-      // Skip directors already imported in Step 2 — but backfill jobTitle if missing
-      const existingByExtId = await prisma.user.findFirst({ where: { externalId: fomsId } });
-      if (existingByExtId) {
-        const updates: Record<string, string> = {};
-        if (!existingByExtId.jobTitle  && position)            updates.jobTitle   = position;
-        if (!existingByExtId.department && mapDepartment(rmRole)) updates.department = mapDepartment(rmRole)!;
-        if (Object.keys(updates).length)
-          await prisma.user.update({ where: { id: existingByExtId.id }, data: updates });
-        skipped.push(fomsId);
-        continue;
-      }
-
       const { role }   = mapRole(rmRole);
       const jobTitle   = position || null;
       const department = mapDepartment(rmRole);
+
+      // Auto-create the JobTitle record if it doesn't exist yet
+      if (jobTitle) {
+        await prisma.jobTitle.upsert({
+          where:  { name: jobTitle },
+          create: { name: jobTitle },
+          update: {},
+        });
+      }
 
       // Resolve division from dominant director
       let divisionId: string | null = null;
@@ -84,6 +81,20 @@ export async function POST(req: Request) {
         }
       }
 
+      // Check if already imported as a director (externalId match)
+      const existingByExtId = await prisma.user.findFirst({ where: { externalId: fomsId } });
+      if (existingByExtId) {
+        await prisma.user.update({
+          where: { id: existingByExtId.id },
+          data: {
+            ...(jobTitle   ? { jobTitle }   : {}),
+            ...(department ? { department } : {}),
+          },
+        });
+        skipped.push(fomsId);
+        continue;
+      }
+
       // Upsert by email (in case user already registered via Google OAuth)
       const existing = await prisma.user.findFirst({ where: { email } });
       if (existing) {
@@ -92,8 +103,8 @@ export async function POST(req: Request) {
           data: {
             externalId: fomsId,
             role:       existing.role === "ADMIN" ? existing.role : role,
-            jobTitle:   existing.jobTitle ?? jobTitle,
-            department: existing.department ?? department,
+            ...(jobTitle   ? { jobTitle }   : {}),
+            ...(department ? { department } : {}),
             divisionId: existing.divisionId ?? divisionId,
           },
         });
@@ -119,7 +130,8 @@ export async function POST(req: Request) {
     }
   }
 
-  revalidateTag("users", "max" as never);
+  revalidateTag("users",      "max" as never);
+  revalidateTag("job-titles", "max" as never);
 
   return ok({ created: created.length, skipped: skipped.length, errors });
 }

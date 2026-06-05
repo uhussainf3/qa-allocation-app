@@ -12,6 +12,7 @@ const updateSchema = z.object({
   department: z.string().optional().nullable(),
   divisionId: z.string().optional().nullable(),
   isActive:   z.boolean().optional(),
+  isOnshore:  z.boolean().optional(),
 });
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -33,7 +34,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     select: {
       id: true, name: true, email: true, role: true,
       jobTitle: true, capacity: true, department: true,
-      divisionId: true, isActive: true, createdAt: true,
+      divisionId: true, isActive: true, isOnshore: true, createdAt: true,
       division: { select: { id: true, name: true, code: true, color: true } },
     },
   });
