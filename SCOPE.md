@@ -82,6 +82,8 @@ Claude reads this at the start of every session and updates it as features are c
 | 21 | Allocations grid — PM filter | ✅ Done | "All managers" dropdown; selecting PM filters grid to resources in that PM's division |
 | 22 | Manage Allocations — PM filter | ✅ Done | Same PM filter; chains division → PM → role → resource/project |
 | 23 | isOnshore flag on User | ✅ Done | Schema: isOnshore Boolean @default(false); Team page edit modal checkbox with description; bench page excludes onshore users entirely; API PATCH supports field |
+| 24 | PM filter — managerId relationship | ✅ Done | Schema: User.managerId FK to self; weekly import populates managerId from Director ID column (most-frequent director per employee); employees import sets managerId from dominantDirectorId; all 3 PM filters now use managerId directly instead of division-based lookup |
+| 25 | Prisma client regeneration note | ✅ Done | After schema changes (log, isOnshore, managerId), must stop dev server → npx prisma generate → restart to avoid PrismaClientValidationError on new fields |
 
 ---
 

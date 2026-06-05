@@ -254,6 +254,27 @@ export async function POST(req: Request) {
     // Log save failed (likely stale Prisma client — run `npx prisma generate` to fix)
   }
 
+  // Step 6 — update managerId on each resource from the allocation rows
+  // Build a count of directorId occurrences per employee, then assign the most frequent
+  const managerVotes = new Map<string, Map<string, number>>(); // employeeExtId → { directorExtId → count }
+  for (const row of rows) {
+    if (!row.directorId || !row.employeeId) continue;
+    if (!managerVotes.has(row.employeeId)) managerVotes.set(row.employeeId, new Map());
+    const votes = managerVotes.get(row.employeeId)!;
+    votes.set(row.directorId, (votes.get(row.directorId) ?? 0) + 1);
+  }
+  for (const [employeeExtId, votes] of managerVotes) {
+    const userId = userMap.get(employeeExtId);
+    if (!userId) continue;
+    const topDirectorExtId = [...votes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const managerUserId    = topDirectorExtId ? userMap.get(topDirectorExtId) : undefined;
+    if (managerUserId && managerUserId !== userId) {
+      try {
+        await prisma.user.update({ where: { id: userId }, data: { managerId: managerUserId } });
+      } catch { /* non-critical */ }
+    }
+  }
+
   revalidateTag("allocations", "max" as never);
   revalidateTag("users",       "max" as never);
   revalidateTag("projects",    "max" as never);

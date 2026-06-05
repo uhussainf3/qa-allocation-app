@@ -71,13 +71,15 @@ export async function POST(req: Request) {
         });
       }
 
-      // Resolve division from dominant director
+      // Resolve division and manager from dominant director
       let divisionId: string | null = null;
+      let managerId:  string | null = null;
       if (dominantDirectorId) {
         const director = await prisma.user.findFirst({ where: { externalId: dominantDirectorId } });
         if (director) {
           const div = await prisma.division.findFirst({ where: { ownerId: director.id } });
           divisionId = div?.id ?? null;
+          managerId  = director.id;
         }
       }
 
@@ -87,8 +89,13 @@ export async function POST(req: Request) {
         await prisma.user.update({
           where: { id: existingByExtId.id },
           data: {
-            ...(jobTitle   ? { jobTitle }   : {}),
-            ...(department ? { department } : {}),
+            ...(jobTitle    ? { jobTitle }   : {}),
+            ...(department  ? { department } : {}),
+            // Backfill divisionId if currently missing and we now know it
+            ...(divisionId && !existingByExtId.divisionId ? { divisionId } : {}),
+            ...(managerId  && !existingByExtId.managerId  ? { managerId }  : {}),
+            // Promote role if RM says PM but user was auto-created as MEMBER
+            ...(role !== "MEMBER" && existingByExtId.role === "MEMBER" ? { role } : {}),
           },
         });
         skipped.push(fomsId);
@@ -103,9 +110,10 @@ export async function POST(req: Request) {
           data: {
             externalId: fomsId,
             role:       existing.role === "ADMIN" ? existing.role : role,
-            ...(jobTitle   ? { jobTitle }   : {}),
-            ...(department ? { department } : {}),
+            ...(jobTitle    ? { jobTitle }   : {}),
+            ...(department  ? { department } : {}),
             divisionId: existing.divisionId ?? divisionId,
+            managerId:  existing.managerId  ?? managerId,
           },
         });
         skipped.push(fomsId);
@@ -119,6 +127,7 @@ export async function POST(req: Request) {
             department,
             externalId: fomsId,
             divisionId,
+            managerId,
             isActive:   true,
             capacity:   40,
           },

@@ -12,7 +12,7 @@ export default async function AllocationListPage() {
   ]);
 
   const projectManagers = allUsers
-    .filter((u) => u.role === "PROJECT_MANAGER")
+    .filter((u) => (u.role === "PROJECT_MANAGER" || u.role === "DIVISION_OWNER") && u.divisionId)
     .map((u) => ({ id: u.id, name: u.name, email: u.email, divisionId: u.divisionId }));
 
   return (

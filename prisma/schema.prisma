@@ -60,11 +60,14 @@ model User {
   capacity      Int       @default(40)
   department    String?
   divisionId    String?
+  managerId     String?            // Direct manager / PM (FK → User.id, set from Director ID in RM data)
   externalId    String?   @unique  // FomsId from RM tool
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   division                 Division?         @relation("DivisionMembers", fields: [divisionId], references: [id])
+  manager                  User?             @relation("ManagedBy", fields: [managerId], references: [id], onDelete: SetNull)
+  managedUsers             User[]            @relation("ManagedBy")
   ownedDivisions           Division[]        @relation("DivisionOwner")
   accounts                 Account[]
   sessions                 Session[]

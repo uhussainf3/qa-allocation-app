@@ -14,6 +14,7 @@ type User = {
   jobTitle: JobTitle | null;
   department: string | null;
   divisionId: string | null;
+  managerId:  string | null;
 };
 
 type Project = {
@@ -115,15 +116,12 @@ export function AllocationListClient({ allocations, currentUserRole, divisions, 
       : allocations.filter((a) => a.user.divisionId === divisionFilter),
   [allocations, divisionFilter]);
 
-  // PM base — further filtered by the selected PM's division
-  const pmDivisionId = useMemo(() => {
-    if (pmFilter === "all") return null;
-    return projectManagers.find((p) => p.id === pmFilter)?.divisionId ?? null;
-  }, [pmFilter, projectManagers]);
-
+  // PM base — filtered by direct manager assignment (User.managerId)
   const pmBase = useMemo(() =>
-    pmDivisionId ? divBase.filter((a) => a.user.divisionId === pmDivisionId) : divBase,
-  [divBase, pmDivisionId]);
+    pmFilter === "all"
+      ? divBase
+      : divBase.filter((a) => a.user.managerId === pmFilter),
+  [divBase, pmFilter]);
 
   // Role base — pre-filtered by division + PM + role
   const roleBase = useMemo(() =>

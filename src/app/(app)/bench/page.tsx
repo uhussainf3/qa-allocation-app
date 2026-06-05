@@ -64,7 +64,8 @@ export default async function BenchPage() {
     <BenchClient
       bench={bench}
       bench30={bench30}
-      allUsers={users.map((u) => ({ id: u.id, name: u.name, email: u.email, capacity: u.capacity, role: u.role, jobTitle: u.jobTitle, department: u.department, divisionId: u.divisionId }))}
+      allUsers={users.map((u) => ({ id: u.id, name: u.name, email: u.email, capacity: u.capacity, role: u.role, jobTitle: u.jobTitle, department: u.department, divisionId: u.divisionId, managerId: u.managerId }))}
+
       divisions={divisions.map((d) => ({ id: d.id, name: d.name, code: d.code, color: d.color }))}
     />
   );

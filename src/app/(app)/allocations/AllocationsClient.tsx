@@ -259,17 +259,14 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
   const [roleFilter,     setRoleFilter]     = useState("");
   const [pmFilter,       setPmFilter]       = useState("");
 
-  // PM options — users with PROJECT_MANAGER role
+  // PM options — users who are someone's manager (have managedUsers), shown as manager dropdown
+  // Also include DIVISION_OWNER / PROJECT_MANAGER as fallback so the dropdown is useful
   const pmOptions = useMemo(() =>
-    users.filter((u) => u.role === "PROJECT_MANAGER")
-         .map((u) => ({ id: u.id, name: u.name ?? u.email ?? u.id, divisionId: u.divisionId }))
-         .sort((a, b) => a.name.localeCompare(b.name)),
+    users
+      .filter((u) => u.role === "PROJECT_MANAGER" || u.role === "DIVISION_OWNER")
+      .map((u) => ({ id: u.id, name: u.name ?? u.email ?? u.id }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
   [users]);
-
-  // Division of the selected PM (used to filter resources)
-  const pmDivisionId = useMemo(() =>
-    pmFilter ? (pmOptions.find((p) => p.id === pmFilter)?.divisionId ?? null) : null,
-  [pmFilter, pmOptions]);
 
   // Unique role options derived from loaded users (only non-null departments)
   const roleOptions = useMemo(() => {
@@ -278,15 +275,15 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
     return Array.from(seen).sort();
   }, [users]);
 
-  // Users visible in the grid — filtered by division, role AND PM's division
+  // Users visible in the grid — filtered by division, role AND direct manager (managerId)
   const visibleUsers = useMemo(
     () => users.filter((u) => {
-      if (divisionFilter                  && u.divisionId !== divisionFilter)  return false;
-      if (roleFilter                      && u.department  !== roleFilter)      return false;
-      if (pmDivisionId                    && u.divisionId  !== pmDivisionId)   return false;
+      if (divisionFilter && u.divisionId !== divisionFilter) return false;
+      if (roleFilter     && u.department  !== roleFilter)    return false;
+      if (pmFilter       && u.managerId   !== pmFilter)      return false;
       return true;
     }),
-    [users, divisionFilter, roleFilter, pmDivisionId]
+    [users, divisionFilter, roleFilter, pmFilter]
   );
 
   // Derived conflict warnings — computed after all state is declared

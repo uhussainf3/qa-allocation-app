@@ -21,6 +21,7 @@ type BenchUser = {
   jobTitle:           string | null;
   department:         string | null;
   divisionId:         string | null;
+  managerId:          string | null;
   allocatedPct:       number;
   onBenchPct:         number;
   currentAllocations: ActiveAllocation[];
@@ -35,6 +36,7 @@ type SimpleUser = {
   jobTitle:   string | null;
   department: string | null;
   divisionId: string | null;
+  managerId:  string | null;
 };
 
 type DivisionRef = { id: string; name: string; code: string; color: string };
@@ -117,17 +119,12 @@ export function BenchClient({ bench, bench30, allUsers, divisions }: Props) {
 
   const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 
-  // PM options — project managers derived from allUsers
+  // PM options — division owners and project managers (they appear as managers of resources)
   const pmOptions = useMemo(() =>
     allUsers
-      .filter((u) => u.role === "PROJECT_MANAGER")
+      .filter((u) => u.role === "PROJECT_MANAGER" || u.role === "DIVISION_OWNER")
       .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")),
   [allUsers]);
-
-  // Division of the selected PM
-  const pmDivisionId = useMemo(() =>
-    pmFilter ? (pmOptions.find((p) => p.id === pmFilter)?.divisionId ?? null) : null,
-  [pmFilter, pmOptions]);
 
   // Unique role options (departments) from all bench users
   const roleOptions = useMemo(() => {
@@ -140,18 +137,18 @@ export function BenchClient({ bench, bench30, allUsers, divisions }: Props) {
   const visibleBench = useMemo(
     () => bench.filter((u) => {
       if (divisionFilter && u.divisionId !== divisionFilter) return false;
-      if (pmDivisionId   && u.divisionId !== pmDivisionId)   return false;
+      if (pmFilter       && u.managerId  !== pmFilter)       return false;
       if (roleFilter     && u.department  !== roleFilter)     return false;
       return true;
     }),
-    [bench, divisionFilter, pmDivisionId, roleFilter]
+    [bench, divisionFilter, pmFilter, roleFilter]
   );
 
   // For 30-day view: all users who will have bench capacity at +30 days
   const bench30Users = useMemo(() => {
     const filtered = allUsers.filter((u) => {
       if (divisionFilter && u.divisionId !== divisionFilter) return false;
-      if (pmDivisionId   && u.divisionId !== pmDivisionId)   return false;
+      if (pmFilter       && u.managerId  !== pmFilter)       return false;
       if (roleFilter     && u.department  !== roleFilter)     return false;
       return (bench30[u.id] ?? 0) > 0;
     });
