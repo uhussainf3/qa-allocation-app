@@ -20,6 +20,7 @@ type TeamMember = {
   isActive:   boolean;
   isOnshore:  boolean;
   divisionId: string | null;
+  managerId:  string | null;
   createdAt:  string;
   division:   DivisionRef | null;
 };
@@ -45,7 +46,7 @@ const ROLE_LABELS: Record<string, string> = {
 const EMPTY_FORM = {
   name: "", email: "", role: "MEMBER" as string,
   jobTitle: "", capacity: 40, department: "",
-  divisionId: "", isActive: true, isOnshore: false,
+  divisionId: "", managerId: "", isActive: true, isOnshore: false,
 };
 
 function initials(name: string | null, email: string | null) {
@@ -55,6 +56,12 @@ function initials(name: string | null, email: string | null) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function TeamClient({ users: initial, divisions, jobTitles }: Props) {
+  const pmOptions = useMemo(
+    () => initial
+      .filter((u) => u.isActive && (u.role === "PROJECT_MANAGER" || u.role === "DIVISION_OWNER"))
+      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")),
+    [initial]
+  );
   const router = useRouter();
   const [, startTransition] = useTransition();
 
@@ -102,7 +109,7 @@ export function TeamClient({ users: initial, divisions, jobTitles }: Props) {
       name: u.name ?? "", email: u.email ?? "",
       role: u.role, jobTitle: u.jobTitle ?? "",
       capacity: u.capacity, department: u.department ?? "",
-      divisionId: u.divisionId ?? "", isActive: u.isActive, isOnshore: u.isOnshore,
+      divisionId: u.divisionId ?? "", managerId: u.managerId ?? "", isActive: u.isActive, isOnshore: u.isOnshore,
     });
     setError(null);
     setShowModal(true);
@@ -123,6 +130,7 @@ export function TeamClient({ users: initial, divisions, jobTitles }: Props) {
         capacity:   form.capacity,
         department: form.department.trim() || null,
         divisionId: form.divisionId || null,
+        managerId:  form.managerId  || null,
         isActive:   form.isActive,
         isOnshore:  form.isOnshore,
       };
@@ -369,6 +377,14 @@ export function TeamClient({ users: initial, divisions, jobTitles }: Props) {
               <label style={{ fontSize: 13 }}>
                 <div style={{ marginBottom: 4, fontWeight: 500 }}>Capacity (h/wk)</div>
                 <input className="input" type="number" min={1} max={60} value={form.capacity} onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) })} style={{ width: "100%" }} />
+              </label>
+
+              <label style={{ fontSize: 13, gridColumn: "1/-1" }}>
+                <div style={{ marginBottom: 4, fontWeight: 500 }}>Reports to (PM)</div>
+                <select className="input" value={form.managerId} onChange={(e) => setForm({ ...form, managerId: e.target.value })} style={{ width: "100%" }}>
+                  <option value="">— None —</option>
+                  {pmOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
               </label>
 
               <label style={{ fontSize: 13, gridColumn: "1/-1" }}>

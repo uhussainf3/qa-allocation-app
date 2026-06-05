@@ -186,7 +186,7 @@ function RMImport() {
 
   // Parsed data
   type EmpRow  = { fomsId: string; name: string; email: string; rmRole: string; position: string };
-  type ProjRow = { projectId: string; name: string; status: string; directorId: string; startDate: string; endDate: string };
+  type ProjRow = { projectId: string; name: string; status: string; directorId: string; pmName: string; startDate: string; endDate: string };
   type AllocRow = { employeeId: string; projectId: string; allocation: number; startDate: string; endDate: string };
 
   const [empRows,   setEmpRows]   = useState<EmpRow[]>([]);
@@ -255,6 +255,7 @@ function RMImport() {
             name:       r["Project"]?.trim() ?? "",
             status:     r["Status"]?.trim() ?? "Active",
             directorId: dirId ?? "",
+            pmName:     r["PM"]?.trim() ?? "",
             startDate:  r["Start Date"]?.trim() ?? "",
             endDate:    r["End Date"]?.trim() ?? "",
           });
@@ -488,6 +489,7 @@ type ProjImportRow = {
   name: string;
   status: string;
   directorId: string;
+  pmName?: string;
   startDate?: string;
   endDate?: string;
 };
@@ -527,6 +529,7 @@ function ProjectsImport() {
             name:       r["Project"]?.trim() ?? "",
             status:     r["Status"]?.trim() ?? "Active",
             directorId: r["DirectorID"]?.trim() ?? "",
+            pmName:     r["PM"]?.trim() || undefined,
             startDate:  r["Start Date"]?.trim() || undefined,
             endDate:    r["End Date"]?.trim() || undefined,
           }));

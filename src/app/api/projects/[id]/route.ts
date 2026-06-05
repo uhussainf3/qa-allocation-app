@@ -13,6 +13,7 @@ const updateSchema = z.object({
   endDate: z.string().nullable().optional(),
   color: z.string().optional(),
   status: z.enum(["ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"]).optional(),
+  managerId: z.string().nullable().optional(),
 });
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {

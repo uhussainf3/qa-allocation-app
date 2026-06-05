@@ -52,7 +52,7 @@ export const getCachedActiveProjects = unstable_cache(
   async () =>
     prisma.project.findMany({
       where: { status: "ACTIVE" },
-      select: { id: true, name: true, code: true, color: true, divisionId: true },
+      select: { id: true, name: true, code: true, color: true, divisionId: true, managerId: true },
     }),
   ["active-projects"],
   { revalidate: TTL, tags: ["projects"] }
@@ -116,7 +116,7 @@ export const getCachedAllAllocationsList = unstable_cache(
       },
       include: {
         user:    { select: { id: true, name: true, email: true, image: true, capacity: true, role: true, jobTitle: true, department: true, divisionId: true, managerId: true } },
-        project: { select: { id: true, name: true, code: true, color: true } },
+        project: { select: { id: true, name: true, code: true, color: true, managerId: true } },
         task:    { select: { id: true, name: true } },
       },
       orderBy: [{ startDate: "asc" }, { user: { name: "asc" } }],

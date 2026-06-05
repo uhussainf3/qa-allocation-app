@@ -3,14 +3,15 @@ import { getNextNWeeks, getWeekLabel, getMondayOf, workingDaysInWeek } from "@/l
 import { getCachedSimpleUsers, getCachedAllocationsMinimal, getCachedApprovedLeaves, getCachedPublicHolidays, getCachedDivisions } from "@/lib/queries";
 import { Suspense } from "react";
 import { DivisionFilter } from "@/components/DivisionFilter";
+import { DepartmentFilter } from "@/components/DepartmentFilter";
 
 export default async function CapacityPage({
   searchParams,
 }: {
-  searchParams: Promise<{ division?: string }>;
+  searchParams: Promise<{ division?: string; department?: string }>;
 }) {
   await auth();
-  const { division: divisionId } = await searchParams;
+  const { division: divisionId, department: departmentFilter } = await searchParams;
 
   const weeks = getNextNWeeks(12);
   const weekEnd = new Date(weeks[weeks.length - 1]);
@@ -27,10 +28,15 @@ export default async function CapacityPage({
     getCachedDivisions(),
   ]);
 
-  // Apply division filter
-  const users = divisionId
-    ? allUsers.filter((u) => u.divisionId === divisionId)
-    : allUsers;
+  // Derive unique departments before filtering
+  const departments = [...new Set(allUsers.map((u) => u.department).filter(Boolean) as string[])].sort();
+
+  // Apply division + department filters
+  const users = allUsers.filter((u) => {
+    if (divisionId       && u.divisionId  !== divisionId)       return false;
+    if (departmentFilter && u.department  !== departmentFilter)  return false;
+    return true;
+  });
 
   const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
   const leaves      = rawLeaves.map((l) => ({ ...l, startDate: new Date(l.startDate), endDate: new Date(l.endDate) }));
@@ -81,6 +87,9 @@ export default async function CapacityPage({
         </div>
         <Suspense>
           <DivisionFilter divisions={divisionsMeta} value={divisionId ?? ""} />
+        </Suspense>
+        <Suspense>
+          <DepartmentFilter departments={departments} value={departmentFilter ?? ""} />
         </Suspense>
       </div>
       <div className="grid-wrap" style={{ overflowX: "auto" }}>

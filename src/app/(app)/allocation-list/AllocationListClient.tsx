@@ -22,6 +22,7 @@ type Project = {
   name: string;
   code: string;
   color: string;
+  managerId: string | null;
 };
 
 type Allocation = {
@@ -116,12 +117,11 @@ export function AllocationListClient({ allocations, currentUserRole, divisions, 
       : allocations.filter((a) => a.user.divisionId === divisionFilter),
   [allocations, divisionFilter]);
 
-  // PM base — filtered by direct manager assignment (User.managerId)
-  const pmBase = useMemo(() =>
-    pmFilter === "all"
-      ? divBase
-      : divBase.filter((a) => a.user.managerId === pmFilter),
-  [divBase, pmFilter]);
+  // PM base — filtered by project ownership (project.managerId === selected PM)
+  const pmBase = useMemo(() => {
+    if (pmFilter === "all") return divBase;
+    return divBase.filter((a) => a.project.managerId === pmFilter);
+  }, [divBase, pmFilter]);
 
   // Role base — pre-filtered by division + PM + role
   const roleBase = useMemo(() =>

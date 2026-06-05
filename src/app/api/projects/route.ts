@@ -14,6 +14,7 @@ const createSchema = z.object({
   endDate: z.string().optional().nullable(),
   color: z.string().default("#6366f1"),
   status: z.enum(["ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"]).default("ACTIVE"),
+  managerId: z.string().optional().nullable(),
 });
 
 export async function GET() {

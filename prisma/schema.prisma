@@ -68,6 +68,7 @@ model User {
   division                 Division?         @relation("DivisionMembers", fields: [divisionId], references: [id])
   manager                  User?             @relation("ManagedBy", fields: [managerId], references: [id], onDelete: SetNull)
   managedUsers             User[]            @relation("ManagedBy")
+  managedProjects          Project[]         @relation("ManagedProjects")
   ownedDivisions           Division[]        @relation("DivisionOwner")
   accounts                 Account[]
   sessions                 Session[]
@@ -116,11 +117,13 @@ model Project {
   endDate         DateTime?
   color           String   @default("#6366f1")
   divisionId      String?
+  managerId       String?            // Project Manager (FK → User.id)
   externalId      String?  @unique  // ProjectID from RM tool
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   division         Division?         @relation(fields: [divisionId], references: [id])
+  manager          User?             @relation("ManagedProjects", fields: [managerId], references: [id])
   tasks            Task[]
   allocations      Allocation[]
   hoursLogs        HoursLog[]

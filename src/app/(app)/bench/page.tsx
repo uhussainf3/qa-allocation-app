@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getCachedSimpleUsers, getCachedDivisions } from "@/lib/queries";
+import { getCachedSimpleUsers, getCachedDivisions, getCachedActiveProjects } from "@/lib/queries";
 import { BenchClient } from "./BenchClient";
 
 export default async function BenchPage() {
@@ -12,11 +12,11 @@ export default async function BenchPage() {
   const day30 = new Date(today);
   day30.setDate(today.getDate() + 30);
 
-  const [allActiveUsers, allocToday, alloc30, divisions] = await Promise.all([
+  const [allActiveUsers, allocToday, alloc30, divisions, projects] = await Promise.all([
     getCachedSimpleUsers(),
     prisma.allocation.findMany({
       where:   { startDate: { lte: today }, endDate: { gte: today } },
-      include: { project: { select: { id: true, name: true, color: true } } },
+      include: { project: { select: { id: true, name: true, color: true, managerId: true } } },
       orderBy: { endDate: "asc" },
     }),
     prisma.allocation.findMany({
@@ -24,6 +24,7 @@ export default async function BenchPage() {
       select: { userId: true, hoursPerDay: true },
     }),
     getCachedDivisions(),
+    getCachedActiveProjects(),
   ]);
 
   // Exclude onshore resources from bench entirely
@@ -60,13 +61,24 @@ export default async function BenchPage() {
     bench30[u.id]    = Math.max(0, 100 - pct);
   }
 
+  // Build PM → Set<userId> map from today's allocations (project-based)
+  const pmUserMap: Record<string, string[]> = {};
+  for (const a of allocToday) {
+    const pmId = a.project.managerId;
+    if (pmId) {
+      if (!pmUserMap[pmId]) pmUserMap[pmId] = [];
+      if (!pmUserMap[pmId].includes(a.userId)) pmUserMap[pmId].push(a.userId);
+    }
+  }
+
   return (
     <BenchClient
       bench={bench}
       bench30={bench30}
       allUsers={users.map((u) => ({ id: u.id, name: u.name, email: u.email, capacity: u.capacity, role: u.role, jobTitle: u.jobTitle, department: u.department, divisionId: u.divisionId, managerId: u.managerId }))}
-
       divisions={divisions.map((d) => ({ id: d.id, name: d.name, code: d.code, color: d.color }))}
+      projects={projects.map((p) => ({ id: p.id, name: p.name, code: p.code, color: p.color }))}
+      pmUserMap={pmUserMap}
     />
   );
 }

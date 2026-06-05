@@ -11,6 +11,7 @@ const updateSchema = z.object({
   capacity:   z.number().int().min(1).max(60).optional(),
   department: z.string().optional().nullable(),
   divisionId: z.string().optional().nullable(),
+  managerId:  z.string().optional().nullable(),
   isActive:   z.boolean().optional(),
   isOnshore:  z.boolean().optional(),
 });

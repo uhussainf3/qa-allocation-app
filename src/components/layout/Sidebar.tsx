@@ -21,6 +21,7 @@ const NAV: NavGroup[] = [
     items: [
       { href: "/allocations",     label: "Allocations"        },
       { href: "/allocation-list", label: "Manage Allocations"  },
+      { href: "/my-projects",     label: "My Projects"         },
       { href: "/pipeline",        label: "Pipeline"            },
       { href: "/capacity",        label: "Capacity"            },
       { href: "/forecast",        label: "Forecast"            },

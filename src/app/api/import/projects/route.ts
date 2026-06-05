@@ -33,6 +33,7 @@ export async function POST(req: Request) {
       name:       string;
       status:     string;
       directorId: string;
+      pmName?:    string;
       startDate?: string;
       endDate?:   string;
     }>;
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
   const errors: { projectId: string; message: string }[] = [];
 
   for (const row of rows) {
-    const { projectId, name, status, directorId, startDate, endDate } = row;
+    const { projectId, name, status, directorId, pmName, startDate, endDate } = row;
 
     try {
       // Find the division via the director's externalId
@@ -53,6 +54,19 @@ export async function POST(req: Request) {
       const division = directorUser
         ? await prisma.division.findFirst({ where: { ownerId: directorUser.id } })
         : null;
+
+      // Resolve PM by name match
+      let managerId: string | null = null;
+      if (pmName?.trim()) {
+        const pmUser = await prisma.user.findFirst({
+          where: {
+            name:     { contains: pmName.trim(), mode: "insensitive" },
+            isActive: true,
+            role:     { in: ["PROJECT_MANAGER", "DIVISION_OWNER", "ADMIN"] },
+          },
+        });
+        managerId = pmUser?.id ?? null;
+      }
 
       const code      = `P-${projectId}`;
       const appStatus = mapStatus(status);
@@ -73,6 +87,7 @@ export async function POST(req: Request) {
             externalId: projectId,
             startDate:  start ?? existing.startDate,
             endDate:    end   ?? existing.endDate,
+            ...(managerId ? { managerId } : {}),
           },
         });
         updated.push(name);
@@ -84,6 +99,7 @@ export async function POST(req: Request) {
             status:     appStatus,
             divisionId: division?.id ?? null,
             externalId: projectId,
+            managerId,
             startDate:  start ?? undefined,
             endDate:    end   ?? undefined,
           },

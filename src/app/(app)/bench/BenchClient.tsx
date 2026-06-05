@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,12 +41,15 @@ type SimpleUser = {
 };
 
 type DivisionRef = { id: string; name: string; code: string; color: string };
+type ProjectRef  = { id: string; name: string; code: string; color: string };
 
 interface Props {
   bench:     BenchUser[];
   bench30:   Record<string, number>;   // userId → onBenchPct at +30 days
   allUsers:  SimpleUser[];
   divisions: DivisionRef[];
+  projects:  ProjectRef[];
+  pmUserMap: Record<string, string[]>; // pmId → userIds with allocations on PM's projects
 }
 
 type View = "detailed" | "simple" | "thirty";
@@ -109,13 +113,112 @@ const TH_STYLE: React.CSSProperties = {
   background: "var(--surface-2)", borderBottom: "1px solid var(--border)",
 };
 
+// ─── Add Allocation Modal ─────────────────────────────────────────────────────
+
+interface AddAllocModalProps {
+  user:      BenchUser | SimpleUser;
+  projects:  ProjectRef[];
+  onClose:   () => void;
+  onSaved:   () => void;
+}
+
+function AddAllocModal({ user, projects, onClose, onSaved }: AddAllocModalProps) {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const dailyCap = user.capacity / 5;
+
+  const [projectId, setProjectId] = useState("");
+  const [startDate, setStartDate] = useState(todayStr);
+  const [endDate,   setEndDate]   = useState(todayStr);
+  const [allocPct,  setAllocPct]  = useState(100);
+  const [saving,    setSaving]    = useState(false);
+  const [error,     setError]     = useState("");
+
+  const hoursPerDay = Math.round((allocPct / 100) * dailyCap * 10) / 10;
+
+  async function handleSave() {
+    if (!projectId)          { setError("Select a project."); return; }
+    if (endDate < startDate) { setError("End date must be after start date."); return; }
+    if (allocPct <= 0 || allocPct > 200) { setError("Allocation % must be between 1 and 200."); return; }
+
+    setSaving(true); setError("");
+    try {
+      const res = await fetch("/api/allocations", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, projectId, startDate, endDate, hoursPerDay }),
+      });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); setError(j.error ?? "Failed to save."); return; }
+      onSaved();
+      onClose();
+    } catch { setError("Network error."); }
+    finally   { setSaving(false); }
+  }
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="card" style={{ width: 440, padding: 26, maxHeight: "90vh", overflowY: "auto" }}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Add Allocation</h2>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 18 }}>
+          Resource: <strong>{user.name ?? user.email}</strong> · {user.capacity}h/wk
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <label className="field">
+            <span>Project</span>
+            <select className="input" value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ width: "100%" }}>
+              <option value="">Select project…</option>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </label>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <label className="field">
+              <span>Start date</span>
+              <input className="input" type="date" value={startDate}
+                onChange={(e) => { setStartDate(e.target.value); if (endDate < e.target.value) setEndDate(e.target.value); }} />
+            </label>
+            <label className="field">
+              <span>End date</span>
+              <input className="input" type="date" value={endDate} min={startDate}
+                onChange={(e) => setEndDate(e.target.value)} />
+            </label>
+          </div>
+
+          <label className="field">
+            <span>Allocation %</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <input className="input" type="number" min={1} max={200} value={allocPct}
+                onChange={(e) => setAllocPct(Number(e.target.value))} style={{ width: 100 }} />
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>= {hoursPerDay}h/day</span>
+            </div>
+          </label>
+        </div>
+
+        {error && <div style={{ marginTop: 12, color: "var(--bad)", fontSize: 13 }}>{error}</div>}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 22, justifyContent: "flex-end" }}>
+          <button className="btn" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="btn primary" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : "Add Allocation"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function BenchClient({ bench, bench30, allUsers, divisions }: Props) {
+export function BenchClient({ bench, bench30, allUsers, divisions, projects, pmUserMap }: Props) {
+  const router = useRouter();
+
   const [view,           setView]           = useState<View>("detailed");
   const [divisionFilter, setDivisionFilter] = useState("");
   const [roleFilter,     setRoleFilter]     = useState("");
   const [pmFilter,       setPmFilter]       = useState("");
+  const [allocTarget,    setAllocTarget]    = useState<BenchUser | SimpleUser | null>(null);
 
   const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 
@@ -134,28 +237,29 @@ export function BenchClient({ bench, bench30, allUsers, divisions }: Props) {
   }, [bench]);
 
   // Apply all filters to today's bench
-  const visibleBench = useMemo(
-    () => bench.filter((u) => {
+  const visibleBench = useMemo(() => {
+    const pmUserIds = pmFilter ? new Set(pmUserMap[pmFilter] ?? []) : null;
+    return bench.filter((u) => {
       if (divisionFilter && u.divisionId !== divisionFilter) return false;
-      if (pmFilter       && u.managerId  !== pmFilter)       return false;
-      if (roleFilter     && u.department  !== roleFilter)     return false;
+      if (roleFilter     && u.department  !== roleFilter)    return false;
+      if (pmUserIds      && !pmUserIds.has(u.id))            return false;
       return true;
-    }),
-    [bench, divisionFilter, pmFilter, roleFilter]
-  );
+    });
+  }, [bench, pmUserMap, divisionFilter, pmFilter, roleFilter]);
 
   // For 30-day view: all users who will have bench capacity at +30 days
   const bench30Users = useMemo(() => {
+    const pmUserIds = pmFilter ? new Set(pmUserMap[pmFilter] ?? []) : null;
     const filtered = allUsers.filter((u) => {
       if (divisionFilter && u.divisionId !== divisionFilter) return false;
-      if (pmFilter       && u.managerId  !== pmFilter)       return false;
-      if (roleFilter     && u.department  !== roleFilter)     return false;
+      if (roleFilter     && u.department  !== roleFilter)    return false;
+      if (pmUserIds      && !pmUserIds.has(u.id))            return false;
       return (bench30[u.id] ?? 0) > 0;
     });
     return filtered
       .map((u) => ({ ...u, onBenchPct: bench30[u.id] ?? 0 }))
       .sort((a, b) => b.onBenchPct - a.onBenchPct);
-  }, [allUsers, bench30, divisionFilter, pmFilter, roleFilter]);
+  }, [allUsers, bench30, pmUserMap, divisionFilter, pmFilter, roleFilter]);
 
   // KPIs (today)
   const fullyFree      = visibleBench.filter((u) => u.onBenchPct === 100).length;
@@ -167,30 +271,48 @@ export function BenchClient({ bench, bench30, allUsers, divisions }: Props) {
 
   // ── CSV Export ────────────────────────────────────────────────────────────
   function exportCsv() {
-    const isThirty = view === "thirty";
-    const data     = isThirty ? bench30Users : visibleBench;
-    const headers  = isThirty
-      ? ["Name", "Role", "Department", "Bench % (in 30 days)"]
-      : ["Name", "Role", "Department", "Bench %", "Allocated %", "Current Projects"];
+    let headers: string[];
+    let rows: string[][];
 
-    const rows = data.map((u) => {
-      const name  = u.name ?? u.email ?? "";
-      const role  = u.jobTitle ?? u.role.replace(/_/g, " ");
-      const dept  = u.department ?? "";
-      if (isThirty) {
-        return [name, role, dept, String(u.onBenchPct)];
-      }
-      const bu         = u as BenchUser;
-      const projects   = bu.currentAllocations?.map((a) => `${a.projectName} (${a.pct}%)`).join("; ") ?? "";
-      return [name, role, dept, String(bu.onBenchPct), String(bu.allocatedPct), projects];
-    });
+    if (view === "thirty") {
+      headers = ["Name", "Role", "Department", "Bench % (in 30 days)"];
+      rows = bench30Users.map((u) => [
+        u.name ?? u.email ?? "",
+        u.jobTitle ?? u.role.replace(/_/g, " "),
+        u.department ?? "",
+        String(u.onBenchPct),
+      ]);
+    } else if (view === "simple") {
+      headers = ["Name", "Role", "Department", "Bench %"];
+      rows = visibleBench.map((u) => [
+        u.name ?? u.email ?? "",
+        u.jobTitle ?? u.role.replace(/_/g, " "),
+        u.department ?? "",
+        String(u.onBenchPct),
+      ]);
+    } else {
+      headers = ["Name", "Role", "Department", "Bench %", "Allocated %", "Current Projects"];
+      rows = visibleBench.map((u) => {
+        const projects = u.currentAllocations
+          .map((a) => `${a.projectName} (${a.pct}%, ends ${fmtDate(a.endDate)})`)
+          .join("; ");
+        return [
+          u.name ?? u.email ?? "",
+          u.jobTitle ?? u.role.replace(/_/g, " "),
+          u.department ?? "",
+          String(u.onBenchPct),
+          String(u.allocatedPct),
+          projects,
+        ];
+      });
+    }
 
-    const csv   = [headers, ...rows].map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob  = new Blob([csv], { type: "text/csv" });
-    const url   = URL.createObjectURL(blob);
-    const a     = document.createElement("a");
-    a.href      = url;
-    a.download  = `bench-${view}-${new Date().toISOString().slice(0, 10)}.csv`;
+    const csv  = [headers, ...rows].map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `bench-${view}-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -283,6 +405,7 @@ export function BenchClient({ bench, bench30, allUsers, divisions }: Props) {
                     <th style={{ ...TH_STYLE, width: "22%" }}>Resource</th>
                     <th style={{ ...TH_STYLE, textAlign: "center", width: "16%" }}>On Bench</th>
                     <th style={{ ...TH_STYLE }}>Current Allocations</th>
+                    <th style={{ ...TH_STYLE, width: 1 }} />
                   </tr>
                 </thead>
                 <tbody>
@@ -308,22 +431,27 @@ export function BenchClient({ bench, bench30, allUsers, divisions }: Props) {
                               <div
                                 key={a.projectId + a.endDate}
                                 style={{
-                                  display: "inline-flex", alignItems: "center", gap: 6,
-                                  padding: "4px 10px", borderRadius: 20,
+                                  display: "inline-flex", flexDirection: "column",
+                                  padding: "5px 10px", borderRadius: 10,
                                   background: "var(--surface-2)", border: "1px solid var(--border)",
-                                  fontSize: 12, whiteSpace: "nowrap",
+                                  fontSize: 12, gap: 2,
                                 }}
                               >
-                                <span style={{ width: 8, height: 8, borderRadius: "50%", background: a.projectColor, flexShrink: 0 }} />
-                                <span style={{ fontWeight: 500 }}>{a.projectName}</span>
-                                <span style={{ color: "var(--text-muted)" }}>·</span>
-                                <span style={{ color: "var(--text-muted)" }}>{a.pct}%</span>
-                                <span style={{ color: "var(--text-muted)" }}>·</span>
-                                <span style={{ color: "var(--text-muted)" }}>ends {fmtDate(a.endDate)}</span>
+                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: a.projectColor, flexShrink: 0 }} />
+                                  <span style={{ fontWeight: 500 }}>{a.projectName}</span>
+                                  <span style={{ color: "var(--text-muted)", marginLeft: 2 }}>{a.pct}%</span>
+                                </div>
+                                <div style={{ fontSize: 11, color: "var(--text-muted)", paddingLeft: 14 }}>
+                                  ends {fmtDate(a.endDate)}
+                                </div>
                               </div>
                             ))}
                           </div>
                         )}
+                      </td>
+                      <td style={{ padding: "14px 16px", verticalAlign: "middle", whiteSpace: "nowrap" }}>
+                        <button className="btn btn-sm" onClick={() => setAllocTarget(u)}>+ Allocate</button>
                       </td>
                     </tr>
                   ))}
@@ -356,6 +484,7 @@ export function BenchClient({ bench, bench30, allUsers, divisions }: Props) {
                   <ResourceCell {...u} />
                 </div>
                 <BenchBar pct={u.onBenchPct} />
+                <button className="btn btn-sm" onClick={() => setAllocTarget(u)}>+ Allocate</button>
               </div>
             ))
           )}
@@ -388,6 +517,16 @@ export function BenchClient({ bench, bench30, allUsers, divisions }: Props) {
             ))
           )}
         </div>
+      )}
+
+      {/* Add Allocation Modal */}
+      {allocTarget && (
+        <AddAllocModal
+          user={allocTarget}
+          projects={projects}
+          onClose={() => setAllocTarget(null)}
+          onSaved={() => { setAllocTarget(null); router.refresh(); }}
+        />
       )}
 
       {/* Legend */}

@@ -7,9 +7,9 @@ import type { Role, JobTitle } from "@/types/enums";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type User       = { id: string; name: string | null; email: string | null; image: string | null; capacity: number; role: Role; jobTitle: JobTitle | null; divisionId: string | null; department: string | null };
+type User       = { id: string; name: string | null; email: string | null; image: string | null; capacity: number; role: Role; jobTitle: JobTitle | null; divisionId: string | null; department: string | null; managerId: string | null };
 type DivisionRef = { id: string; name: string; code: string; color: string };
-type Project    = { id: string; name: string; code: string; color: string };
+type Project    = { id: string; name: string; code: string; color: string; managerId: string | null };
 type Task       = { id: string; name: string } | null;
 type Allocation = {
   id: string; userId: string; projectId: string; taskId: string | null;
@@ -275,16 +275,24 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
     return Array.from(seen).sort();
   }, [users]);
 
-  // Users visible in the grid — filtered by division, role AND direct manager (managerId)
-  const visibleUsers = useMemo(
-    () => users.filter((u) => {
+  // Users visible in the grid — filtered by division, role, and PM (via project ownership)
+  const visibleUsers = useMemo(() => {
+    // Build set of userIds who have allocations on projects managed by selected PM
+    const pmUserIds = pmFilter
+      ? new Set(
+          allocations
+            .filter((a) => projects.find((p) => p.id === a.projectId)?.managerId === pmFilter)
+            .map((a) => a.userId)
+        )
+      : null;
+
+    return users.filter((u) => {
       if (divisionFilter && u.divisionId !== divisionFilter) return false;
       if (roleFilter     && u.department  !== roleFilter)    return false;
-      if (pmFilter       && u.managerId   !== pmFilter)      return false;
+      if (pmUserIds      && !pmUserIds.has(u.id))            return false;
       return true;
-    }),
-    [users, divisionFilter, roleFilter, pmFilter]
-  );
+    });
+  }, [users, allocations, projects, divisionFilter, roleFilter, pmFilter]);
 
   // Derived conflict warnings — computed after all state is declared
   const newAllocConflict = useMemo(
