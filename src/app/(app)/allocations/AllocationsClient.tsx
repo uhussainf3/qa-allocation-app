@@ -18,6 +18,7 @@ type Allocation = {
 };
 type WeekMeta   = { date: string; label: string; range: string; isCurrent: boolean };
 type CellEntry  = { hours: number; id: string | null; hoursPerDay: number; startDate: string; endDate: string };
+type Batch      = { id: string; label: string; uploadedAt: string; isCurrent: boolean; allocationCount: number };
 type EditState  = {
   allocationId: string | null; userId: string; projectId: string;
   startDate: string; endDate: string; hoursPerDay: number;
@@ -219,6 +220,18 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
     return `⚠ Over capacity in ${overWeeks.length} week${overWeeks.length !== 1 ? "s" : ""}: ${shown}${extra}`;
   }
 
+  // Batch state
+  const [batches,         setBatches]         = useState<Batch[]>([]);
+  const [selectedBatchId, setSelectedBatchId] = useState<string>("");   // "" = current/live view
+
+  // Load available batches on mount (silently — only show selector if batches exist)
+  useEffect(() => {
+    fetch("/api/import/allocations/batches")
+      .then((r) => r.json())
+      .then((d) => { if (Array.isArray(d.data)) setBatches(d.data); })
+      .catch(() => { /* non-critical — hide batch selector */ });
+  }, []);
+
   // UI state
   const [unit,          setUnit]          = useState<"hrs" | "pct">("hrs");
   const [expanded,      setExpanded]      = useState<Record<string, boolean>>({});
@@ -233,7 +246,9 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
     userId: "", projectId: "", startDate: todayStr, endDate: todayStr, hoursPerDay: 8,
   });
 
-  const canEdit = ["ADMIN", "DIVISION_OWNER", "PROJECT_MANAGER"].includes(currentUserRole);
+  const selectedBatch  = batches.find((b) => b.id === selectedBatchId) ?? null;
+  const isHistorical   = !!selectedBatch && !selectedBatch.isCurrent;
+  const canEdit = !isHistorical && ["ADMIN", "DIVISION_OWNER", "PROJECT_MANAGER"].includes(currentUserRole);
 
   const [divisionFilter, setDivisionFilter] = useState("");
 
@@ -260,17 +275,20 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
   );
 
   // ── Fetch + cache ────────────────────────────────────────────────────────────
-  const fetchData = useCallback(async (nWeeks: number, background = false) => {
+  const fetchData = useCallback(async (nWeeks: number, batchId: string, background = false) => {
     if (!background) setLoading(true);
     try {
-      const res  = await fetch(`/api/allocations/view?weeks=${nWeeks}`);
+      const url  = batchId
+        ? `/api/allocations/view?weeks=${nWeeks}&batchId=${batchId}`
+        : `/api/allocations/view?weeks=${nWeeks}`;
+      const res  = await fetch(url);
       if (!res.ok) throw new Error("Failed");
       const data: ViewData = await res.json();
       setUsers(data.users);
       setAllocations(data.allocations);
       setProjects(data.projects);
       setHolidays(data.holidays ?? []);
-      writeCache(nWeeks, data);
+      if (!batchId) writeCache(nWeeks, data);  // only cache the live view
     } catch {
       // keep whatever is in state already
     } finally {
@@ -279,24 +297,28 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
   }, []);
 
   useEffect(() => {
+    if (selectedBatchId) {
+      // Historical batch — always fetch fresh, no client cache
+      fetchData(activeWeeks, selectedBatchId, false);
+      return;
+    }
     const cached = readCache(activeWeeks);
     if (cached) {
-      // Show instantly from cache, then revalidate silently in background
       setUsers(cached.users);
       setAllocations(cached.allocations);
       setProjects(cached.projects);
       setHolidays(cached.holidays ?? []);
       setLoading(false);
-      fetchData(activeWeeks, true); // background refresh
+      fetchData(activeWeeks, "", true);
     } else {
-      fetchData(activeWeeks, false);
+      fetchData(activeWeeks, "", false);
     }
-  }, [activeWeeks, fetchData]);
+  }, [activeWeeks, selectedBatchId, fetchData]);
 
   // ── Refresh helper (after mutations) ────────────────────────────────────────
   const refresh = useCallback(async () => {
     clearCache(activeWeeks);
-    await fetchData(activeWeeks, false);
+    await fetchData(activeWeeks, "", false);
   }, [activeWeeks, fetchData]);
 
   // ── Grid logic ───────────────────────────────────────────────────────────────
@@ -419,6 +441,21 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
           </div>
         </div>
         <div className="page-actions">
+          {batches.length > 0 && (
+            <select
+              className="select-sm"
+              value={selectedBatchId}
+              onChange={(e) => { setSelectedBatchId(e.target.value); setExpanded({}); }}
+              title="Switch between import batches"
+            >
+              <option value="">Live view</option>
+              {batches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.label} ({b.allocationCount} rows){b.isCurrent ? " · current" : ""}
+                </option>
+              ))}
+            </select>
+          )}
           {divisions.length > 0 && (
             <select className="select-sm" value={divisionFilter} onChange={(e) => setDivisionFilter(e.target.value)}>
               <option value="">All divisions</option>
@@ -437,6 +474,28 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
           )}
         </div>
       </div>
+
+      {/* Read-only banner for historical batches */}
+      {isHistorical && (
+        <div style={{
+          padding: "8px 14px", borderRadius: 8, marginBottom: 14,
+          background: "var(--warn-soft, #fef3c7)", color: "var(--warn-dark, #92400e)",
+          fontSize: 13, display: "flex", alignItems: "center", gap: 8,
+        }}>
+          <span>⏱</span>
+          <span>
+            Viewing historical batch: <strong>{selectedBatch!.label}</strong>
+            &nbsp;— imported {new Date(selectedBatch!.uploadedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}.
+            This view is read-only.
+          </span>
+          <button
+            style={{ marginLeft: "auto", fontSize: 12, background: "none", border: "1px solid currentColor", borderRadius: 4, padding: "2px 8px", cursor: "pointer", color: "inherit" }}
+            onClick={() => setSelectedBatchId("")}
+          >
+            Back to live
+          </button>
+        </div>
+      )}
 
       {/* KPI strip */}
       <div className="kpis">

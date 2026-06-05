@@ -450,12 +450,174 @@ function RMImport() {
   return null;
 }
 
+// ─── Weekly batch upload ─────────────────────────────────────────────────────
+
+function WeeklyUpload() {
+  const [file,        setFile]        = useState<File | null>(null);
+  const [batchLabel,  setBatchLabel]  = useState(`RM Week — ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`);
+  const [phase,       setPhase]       = useState<"idle" | "preview" | "confirming" | "done">("idle");
+  const [parseError,  setParseError]  = useState("");
+  const [preview,     setPreview]     = useState<{ total: number; wouldCreate: number; wouldUpdate: number; errors: { row: number; message: string }[] } | null>(null);
+  const [result,      setResult]      = useState<{ created: number; errors: { row: number; message: string }[] } | null>(null);
+  const [rows,        setRows]        = useState<{ employeeId: string; projectId: string; allocation: number; startDate: string; endDate: string }[]>([]);
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    setParseError("");
+    setPreview(null);
+    setPhase("idle");
+  }
+
+  async function handlePreview() {
+    if (!file) { setParseError("Please select RM - Data.csv"); return; }
+    setParseError("");
+
+    const text = await new Promise<string>((res, rej) => {
+      const r = new FileReader();
+      r.onload  = (e) => res(e.target?.result as string);
+      r.onerror = rej;
+      r.readAsText(file);
+    });
+
+    const { rows: csvRows } = parseCsvText(text);
+    const parsed = csvRows
+      .filter((r) => r["Employee ID"]?.trim() && r["Project ID"]?.trim())
+      .map((r) => ({
+        employeeId: r["Employee ID"].trim(),
+        projectId:  r["Project ID"].trim(),
+        allocation: parseFloat(r["Allocation %"] ?? "0"),
+        startDate:  r["start Dte"]?.trim() ?? "",
+        endDate:    r["End Date"]?.trim() ?? "",
+      }));
+    setRows(parsed);
+
+    // Dry-run to get create/update/error counts
+    try {
+      const res  = await fetch("/api/import/allocations", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: batchLabel, sourceFile: file.name, dryRun: true, rows: parsed }),
+      });
+      const data = await res.json() as { data?: { wouldCreate: number; wouldUpdate: number; errors: { row: number; message: string }[] } };
+      const d    = data.data ?? { wouldCreate: 0, wouldUpdate: 0, errors: [] };
+      setPreview({ total: parsed.length, wouldCreate: d.wouldCreate, wouldUpdate: d.wouldUpdate, errors: d.errors });
+      setPhase("preview");
+    } catch (e) {
+      setParseError(`Preview failed: ${String(e)}`);
+    }
+  }
+
+  async function handleConfirm() {
+    if (!file || rows.length === 0) return;
+    setPhase("confirming");
+    try {
+      const res  = await fetch("/api/import/allocations", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: batchLabel, sourceFile: file.name, rows }),
+      });
+      const data = await res.json() as { data?: { created: number; errors: { row: number; message: string }[] } };
+      setResult({ created: data.data?.created ?? 0, errors: data.data?.errors ?? [] });
+      setPhase("done");
+    } catch (e) {
+      setParseError(`Import failed: ${String(e)}`);
+      setPhase("preview");
+    }
+  }
+
+  return (
+    <div className="card" style={{ maxWidth: 560 }}>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>Upload weekly RM allocation file</div>
+      <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
+        Upload the latest <code>RM - Data.csv</code> export. This creates a new batch and marks the previous one as historical.
+      </p>
+
+      <label className="field">
+        <span>Batch label</span>
+        <input className="input" value={batchLabel} onChange={(e) => setBatchLabel(e.target.value)} style={{ width: "100%" }} />
+      </label>
+
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>RM - Data.csv</div>
+        <input type="file" accept=".csv,.txt" onChange={handleFile} />
+        {file && <span style={{ fontSize: 12, color: "var(--ok)", marginLeft: 8 }}>✓ {file.name}</span>}
+      </div>
+
+      {parseError && <div style={{ color: "var(--bad)", fontSize: 13, marginBottom: 10 }}>{parseError}</div>}
+
+      {phase === "idle" && (
+        <button className="btn primary" onClick={handlePreview} disabled={!file}>Preview</button>
+      )}
+
+      {phase === "preview" && preview && (
+        <>
+          <div style={{ background: "var(--surface-2)", borderRadius: 8, padding: "12px 14px", marginBottom: 16 }}>
+            {[
+              ["Total rows parsed", preview.total],
+              ["Will be created",   preview.wouldCreate],
+              ["Will be updated",   preview.wouldUpdate],
+              ["Errors",            preview.errors.length],
+            ].map(([label, val]) => (
+              <div key={label as string} className="row" style={{ justifyContent: "space-between", padding: "4px 0" }}>
+                <span style={{ fontSize: 13 }}>{label}</span>
+                <span style={{ fontFamily: "var(--mono)", fontWeight: 600, color: label === "Errors" && (val as number) > 0 ? "var(--bad)" : undefined }}>{val}</span>
+              </div>
+            ))}
+          </div>
+          {preview.errors.length > 0 && (
+            <details style={{ marginBottom: 12 }}>
+              <summary style={{ fontSize: 12, cursor: "pointer", color: "var(--bad)" }}>{preview.errors.length} errors — click to expand</summary>
+              <div style={{ marginTop: 6 }}>
+                {preview.errors.slice(0, 20).map((e, i) => (
+                  <div key={i} style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 2 }}>Row {e.row}: {e.message}</div>
+                ))}
+                {preview.errors.length > 20 && <div style={{ fontSize: 12, color: "var(--text-muted)" }}>…and {preview.errors.length - 20} more</div>}
+              </div>
+            </details>
+          )}
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn" onClick={() => setPhase("idle")}>Back</button>
+            <button className="btn primary" onClick={handleConfirm}>Confirm &amp; import</button>
+          </div>
+        </>
+      )}
+
+      {phase === "confirming" && (
+        <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Importing…</div>
+      )}
+
+      {phase === "done" && result && (
+        <>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>{result.errors.length === 0 ? "✓" : "⚠"}</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>{result.created} allocations imported</div>
+          {result.errors.length > 0 && (
+            <div style={{ fontSize: 13, color: "var(--bad)", marginBottom: 8 }}>{result.errors.length} errors</div>
+          )}
+          <button className="btn" onClick={() => { setPhase("idle"); setFile(null); setPreview(null); setResult(null); setRows([]); }}>Upload another</button>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Top-level component ─────────────────────────────────────────────────────
 
 export function ImportClient() {
   const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "ADMIN";
-  const [tab, setTab] = useState<"rm" | "legacy">(isAdmin ? "rm" : "legacy");
+  const isAdmin        = session?.user?.role === "ADMIN";
+  const isDivOwner     = session?.user?.role === "DIVISION_OWNER";
+  const canWeeklyUpload = isAdmin || isDivOwner;
+  const [tab, setTab] = useState<"weekly" | "rm" | "legacy">(
+    canWeeklyUpload ? "weekly" : "legacy"
+  );
+
+  type Tab = "weekly" | "rm" | "legacy";
+  const tabs: { key: Tab; label: string; show: boolean }[] = [
+    { key: "weekly", label: "Weekly Upload",       show: canWeeklyUpload },
+    { key: "rm",     label: "Full RM Migration",   show: isAdmin },
+    { key: "legacy", label: "CSV Allocation Import", show: true },
+  ];
+  const visibleTabs = tabs.filter((t) => t.show);
 
   return (
     <div className="page" data-screen-label="Import">
@@ -464,17 +626,17 @@ export function ImportClient() {
         <div className="page-sub">Bulk import from RM tool or CSV</div>
       </div>
 
-      {isAdmin && (
+      {visibleTabs.length > 1 && (
         <div className="row" style={{ gap: 0, marginBottom: 24, borderBottom: "1px solid var(--border)" }}>
-          {([["rm", "RM Tool Migration"], ["legacy", "CSV Allocation Import"]] as const).map(([t, label]) => (
+          {visibleTabs.map(({ key, label }) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={key}
+              onClick={() => setTab(key)}
               style={{
                 padding: "8px 18px", border: "none", background: "none", cursor: "pointer",
-                fontWeight: tab === t ? 600 : 400, fontSize: 14,
-                color: tab === t ? "var(--accent)" : "var(--text-muted)",
-                borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent",
+                fontWeight: tab === key ? 600 : 400, fontSize: 14,
+                color: tab === key ? "var(--accent)" : "var(--text-muted)",
+                borderBottom: tab === key ? "2px solid var(--accent)" : "2px solid transparent",
                 marginBottom: -1,
               }}
             >
@@ -484,6 +646,7 @@ export function ImportClient() {
         </div>
       )}
 
+      {tab === "weekly" && <WeeklyUpload />}
       {tab === "rm"     && <RMImport />}
       {tab === "legacy" && <LegacyImport />}
     </div>

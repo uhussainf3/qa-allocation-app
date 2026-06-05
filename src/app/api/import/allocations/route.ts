@@ -41,9 +41,10 @@ export async function POST(req: Request) {
   if (session.user.role !== "ADMIN") return err("Forbidden", 403);
 
   const body = await req.json();
-  const { label, sourceFile, rows } = body as {
+  const { label, sourceFile, rows, dryRun = false } = body as {
     label:      string;
     sourceFile: string;
+    dryRun?:    boolean;
     rows: Array<{
       employeeId: string;
       projectId:  string;
@@ -57,58 +58,79 @@ export async function POST(req: Request) {
   if (!sourceFile)                         return err("sourceFile is required");
   if (!Array.isArray(rows) || rows.length === 0) return err("rows must be a non-empty array");
 
-  // Mark any existing isCurrent batch as no longer current
+  let wouldCreate = 0;
+  let wouldUpdate = 0;
+  const errors: { row: number; message: string }[] = [];
+
+  // Pre-build lookup maps to avoid N+1 queries
+  const allUsers    = await prisma.user.findMany({ where: { externalId: { not: null } }, select: { id: true, externalId: true } });
+  const allProjects = await prisma.project.findMany({ where: { externalId: { not: null } }, select: { id: true, externalId: true } });
+  const userMap     = new Map(allUsers.map((u) => [u.externalId!, u.id]));
+  const projectMap  = new Map(allProjects.map((p) => [p.externalId!, p.id]));
+
+  type ValidRow = { userId: string; projectId: string; start: Date; end: Date; hoursPerDay: number };
+  const validRows: ValidRow[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const { employeeId, projectId, allocation, startDate, endDate } = rows[i];
+
+    const userId    = userMap.get(employeeId);
+    const projDbId  = projectMap.get(projectId);
+    const start     = parseRMDate(startDate);
+    const end       = parseRMDate(endDate);
+
+    if (!userId)   { errors.push({ row: i + 1, message: `Employee not found: externalId=${employeeId}` }); continue; }
+    if (!projDbId) { errors.push({ row: i + 1, message: `Project not found: externalId=${projectId}` });   continue; }
+    if (!start || !end) { errors.push({ row: i + 1, message: `Invalid dates: start="${startDate}" end="${endDate}"` }); continue; }
+
+    const hoursPerDay = Math.round(((allocation / 100) * 8) * 100) / 100;
+    validRows.push({ userId, projectId: projDbId, start, end, hoursPerDay });
+  }
+
+  // For dry-run, check create vs update counts without writing
+  if (dryRun) {
+    for (const r of validRows) {
+      const exists = await prisma.allocation.findUnique({
+        where: { userId_projectId_startDate: { userId: r.userId, projectId: r.projectId, startDate: r.start } },
+        select: { id: true },
+      });
+      if (exists) wouldUpdate++; else wouldCreate++;
+    }
+    return ok({ dryRun: true, wouldCreate, wouldUpdate, errors });
+  }
+
+  // Real import — create batch and write allocations
   await prisma.allocationBatch.updateMany({
     where: { isCurrent: true },
     data:  { isCurrent: false },
   });
 
   const batch = await prisma.allocationBatch.create({
-    data: {
-      label,
-      sourceFile,
-      isCurrent:   true,
-      uploadedById: session.user.id,
-    },
+    data: { label, sourceFile, isCurrent: true, uploadedById: session.user.id },
   });
 
-  const created: number[] = [];
-  const skipped: number[] = [];
-  const errors:  { row: number; message: string }[] = [];
+  let created = 0;
+  const writeErrors: { row: number; message: string }[] = [];
 
-  for (let i = 0; i < rows.length; i++) {
-    const { employeeId, projectId, allocation, startDate, endDate } = rows[i];
-
-    const user = await prisma.user.findFirst({ where: { externalId: employeeId } });
-    if (!user) {
-      errors.push({ row: i + 1, message: `Employee not found: externalId=${employeeId}` });
-      continue;
-    }
-
-    const project = await prisma.project.findFirst({ where: { externalId: projectId } });
-    if (!project) {
-      errors.push({ row: i + 1, message: `Project not found: externalId=${projectId}` });
-      continue;
-    }
-
-    const start = parseRMDate(startDate);
-    const end   = parseRMDate(endDate);
-    if (!start || !end) {
-      errors.push({ row: i + 1, message: `Invalid dates: start="${startDate}" end="${endDate}"` });
-      continue;
-    }
-
-    const hoursPerDay = Math.round(((allocation / 100) * 8) * 100) / 100;
-
+  for (const r of validRows) {
     try {
-      await prisma.allocation.upsert({
-        where:  { userId_projectId_startDate: { userId: user.id, projectId: project.id, startDate: start } },
-        update: { endDate: end, hoursPerDay, batchId: batch.id },
-        create: { userId: user.id, projectId: project.id, startDate: start, endDate: end, hoursPerDay, batchId: batch.id },
+      const existing = await prisma.allocation.findUnique({
+        where: { userId_projectId_startDate: { userId: r.userId, projectId: r.projectId, startDate: r.start } },
+        select: { id: true },
       });
-      created.push(i + 1);
+      if (existing) {
+        await prisma.allocation.update({
+          where: { id: existing.id },
+          data:  { endDate: r.end, hoursPerDay: r.hoursPerDay, batchId: batch.id },
+        });
+      } else {
+        await prisma.allocation.create({
+          data: { userId: r.userId, projectId: r.projectId, startDate: r.start, endDate: r.end, hoursPerDay: r.hoursPerDay, batchId: batch.id },
+        });
+      }
+      created++;
     } catch (e: unknown) {
-      errors.push({ row: i + 1, message: String(e) });
+      writeErrors.push({ row: validRows.indexOf(r) + 1, message: String(e) });
     }
   }
 
@@ -117,8 +139,8 @@ export async function POST(req: Request) {
   return ok({
     batchId:  batch.id,
     label:    batch.label,
-    created:  created.length,
-    skipped:  skipped.length,
-    errors,
+    created,
+    skipped:  0,
+    errors:   [...errors, ...writeErrors],
   });
 }
