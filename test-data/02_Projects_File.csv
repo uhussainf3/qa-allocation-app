@@ -1,0 +1,80 @@
+ProjectID,Project,Details,Status,DirectorID,Director,PM,Start Date,End Date,Project Type,Sanctioned Hours,Customer
+1966,NS - ABC Parts - NetSuite ERP,,Active,14,Syed Abdul Nasir,Muhammad Kazim Hussain,,,Hourly,,ABC Parts
+2259,NS - Account Management,,Active,14,Syed Abdul Nasir,Muhammad Kazim Hussain,,,Team Based,,Folio3
+2521,NS - Alibi Security - BigCommerce Connector,,Active,14,Syed Abdul Nasir,Muaz Mustafa,2026.01.29,2026.06.30,Milestone Based,200,Alibi Security
+2551,NS - ASAP Skin Products - Shopify Integration,Shopify Connector Integration,Active,14,Syed Abdul Nasir,Muaz Mustafa,,2026.03.30,Milestone Based,350,ASAP Skin Products
+2396,NS - Ascot Capital Group - ERP Implementation and Customizations,,Active,14,Syed Abdul Nasir,Muhammad Kazim Hussain,,,Milestone Based,5000,Ascot Capital Group
+2540,NS - Ascot Capital Group - Hubspot Connector,,Active,14,Syed Abdul Nasir,Muhammad Kazim Hussain,,,Milestone Based,,Ascot Capital Group
+2462,NS - Ascot Capital Group - SCA Implementation and Customizations,,Active,14,Syed Abdul Nasir,Umair Ali,,,Milestone Based,2313,Ascot Capital Group
+1148,NS - Bank & Vogue Development Bundle,1200 hours initially but will be scoped and estimated after 2-3 weeks of the discovery process first SOW hours bundle = 1200 Extra hours (CR) = 623 GiftCard CR (internally absorbed) = 100 SITOO Deployment and Testing = 120 Sold Extra hours = 100,Active,14,Syed Abdul Nasir,Kamil Mushtaq,2020.09.16,,Hourly,2143,Bank & Vogue
+2036,NS - BPQs,,Active,14,Syed Abdul Nasir,Aiman Rizwan,,,Hourly,,Folio3
+2429,NS - CalfTech - Discovery,,Active,14,Syed Abdul Nasir,Junaid Altaf,,,,176,CalfTech Corp
+2498,NS - CalfTech - Phase 1 - ERP Implementation,,Active,14,Syed Abdul Nasir,Junaid Altaf,2025.11.27,,Milestone Based,2045,CalfTech Corp
+2570,NS - Canyon Coffee - Cropster Connector,Cropster - NetSuite Integration,Active,14,Syed Abdul Nasir,Muaz Mustafa,2026.05.07,,Milestone Based,100,Canyon Coffee
+2552,NS - Caravela Coffee - Customization,,Active,14,Syed Abdul Nasir,S M Zeeshan Hussain,,,,,NS - Caravela Coffee - Customization
+2529,NS - Caravela Coffee - Shopify Connector,,Active,14,Syed Abdul Nasir,Zaid Aslam,,,Hourly,100,NS - Caravela Coffee - Shopify Connector
+1079,NS - Channel Advisor Integration,,Active,14,Syed Abdul Nasir,S M Zeeshan Hussain,,,Hourly,,Channel Advisor
+924,NS - ChromaDex - Team based,,Active,14,Syed Abdul Nasir,Azfar Ayub,2019.09.16,,Team Based,,ChromaDex
+2223,NS - Chubby Gorilla - MG2 Connector Implementation,,Active,14,Syed Abdul Nasir,Muaz Mustafa,,,Milestone Based,350,Chubby Gorilla
+1943,NS - Civil Clothing - CMT (Team Based),,Active,14,Syed Abdul Nasir,S M Zeeshan Hussain,,,Team Based,,Civil Clothing CMT
+787,NS - Connector Support,,Active,14,Syed Abdul Nasir,Azfar Ayub,,,Team Based,,Folio3
+354,NS - Daston,,Active,14,Syed Abdul Nasir,Nadeem Ashraf,2015.09.14,2015.12.31,Team Based,,Daston Corporation
+2397,NS - E&S Trading Customizations,Netsuite customization team-based project,Active,14,Syed Abdul Nasir,Kamil Mushtaq,2025.07.01,,Team Based,,E&S Trading
+2265,NS - Edgemine - NetSuite Faire Integration,,Active,14,Syed Abdul Nasir,Umair Ali,,,Milestone Based,100,Edgemine Inc.
+2266,NS - Edgemine - NetSuite FashionGo Integration,,Active,14,Syed Abdul Nasir,Umair Ali,,,Milestone Based,100,Edgemine Inc.
+2038,NS - Emirates Properties - PROPERTESE,Milestones based Product Implementation project along with ERP Impl and and a couple of integration project with a single SOW of multiple projects,Active,14,Syed Abdul Nasir,Kamil Mushtaq,2023.03.01,,Milestone Based,1000,Emirates Properties
+2545,NS - Emirates Properties - PROPERTESE Support,AMC Support,Active,14,Syed Abdul Nasir,Zaid Aslam,2026.03.05,2027.03.12,Hourly,500,Emirates Properties
+1285,NS - EVO Systems - Advanced NS SCA Support (T&M),,Active,14,Syed Abdul Nasir,Nadeem Ashraf,,,Hourly,999999,Evo Systems LLC
+699,NS - Evo Systems - NS ERP Customizations Services (T&M),Time and Material Based.,Active,14,Syed Abdul Nasir,S M Zeeshan Hussain,2018.06.14,,Hourly,999999,Evo Systems LLC
+2525,NS - Fredin Brothers - ERP Implementation,ERP Implementation,Active,14,Syed Abdul Nasir,Kamil Mushtaq,2026.02.04,,Milestone Based,1051,Fredin Brothers
+2399,NS - Grafton - NS Support,,Active,14,Syed Abdul Nasir,Junaid Altaf,,,Hourly,60,NS - Grafton London
+2467,NS - Greene Farm - ERP Implementation,,Active,14,Syed Abdul Nasir,Atif Ashfaq,,,,825,Greene Farm
+1708,NS - GroWell ERP - Team Based,at least 3 months engagement,Active,14,Syed Abdul Nasir,Kamil Mushtaq,2022.11.14,,Team Based,,Gro Well
+2293,NS - Hamilton Fraser - ERP Support (T&M),,Active,14,Syed Abdul Nasir,Junaid Altaf,,,Hourly,1,Hamilton Fraser Brown & Brown
+2294,NS - HL HALL - Teambased Support,,Active,14,Syed Abdul Nasir,Junaid Altaf,,,Team Based,,HL Hall International
+2364,NS - Homeward bound - ERP Implementation,ERP Implementation,Active,14,Syed Abdul Nasir,Kamil Mushtaq,2025.04.14,,Milestone Based,850,Homeward Bound WNC
+2468,NS - Horseware - T&M,,Active,14,Syed Abdul Nasir,Junaid Altaf,,,Hourly,1,Horseware Ireland
+2353,NS - InGenius - SmartCare,,Active,14,Syed Abdul Nasir,Junaid Altaf,2025.05.01,,Hourly,45,InGenius Prep
+2535,NS - Janco Electronics - NS ERP Support (Team based),,Active,14,Syed Abdul Nasir,Nadeem Ashraf,,,Team Based,,NS - Janco Electronics
+2490,NS - Kingspan Solen Integration,,Active,14,Syed Abdul Nasir,Kamil Mushtaq,2025.11.05,,Hourly,420,Kingspan
+2550,NS - Kyriba - Avalara Deployment Project,,Active,14,Syed Abdul Nasir,Nadeem Ashraf,2026.03.25,2026.11.30,Milestone Based,800,Kyriba
+2571,NS - LisaYang - Shopify Connector Consolidation,,Active,14,Syed Abdul Nasir,Bisma Abid,,,Hourly,,Lisa Yang
+2367,NS - Managed Services Program,,Active,14,Syed Abdul Nasir,Nadeem Ashraf,,,Hourly,999999,Folio3
+2587,NS - Margaret O''Leary,,Active,14,Syed Abdul Nasir,Azfar Ayub,,,Milestone Based,1200,Margaret O'Leary
+2539,NS - MIT - ERP Implementation,,Active,14,Syed Abdul Nasir,Umair Ali,,,Milestone Based,788,Morgan Industrial Technology (MIT)
+1425,NS - Naked Wardrobe - ERP Implementation,,Active,14,Syed Abdul Nasir,Atif Ashfaq,,,Milestone Based,3405,Naked Wardrobe
+2284,NS - NetSuite Ai SuiteMate,,Active,14,Syed Abdul Nasir,S M Zeeshan Hussain,,,Hourly,,Folio3
+2292,NS - PDF Solutions - TeamBased Support,,Active,14,Syed Abdul Nasir,Junaid Altaf,,,Team Based,,PDF Solutions
+1306,NS - PMNA - ERP Implementation,ERP Implementation SuiteSuccess,Active,14,Syed Abdul Nasir,Kamil Mushtaq,2021.05.04,,Milestone Based,1925,Press Metal NA
+1165,NS - PROPERTESE,,Active,14,Syed Abdul Nasir,Kamil Mushtaq,2021.12.06,,Team Based,,Folio3
+2537,NS - Proposal,,Active,14,Syed Abdul Nasir,Kamil Mushtaq,,,Hourly,10000,Folio3
+2248,NS - Protiviti - Advance Medical Management ERP Implementation & Integrations,,Active,14,Syed Abdul Nasir,Azfar Ayub,,,Milestone Based,3000,Protiviti
+2439,NS - Protiviti - CLC - ERP Implementation,,Active,14,Syed Abdul Nasir,Nadeem Ashraf,,,Milestone Based,2100,Protiviti
+1616,NS - Protiviti - LHW - ERP Implementation,,Active,14,Syed Abdul Nasir,Atif Ashfaq,2022.06.22,,Milestone Based,3405,Protiviti
+2440,NS - Protiviti - Vultr - Implementation & Integrations,,Active,14,Syed Abdul Nasir,Azfar Ayub,2025.09.08,,Milestone Based,4000,Protiviti
+1956,NS - PWF - ERP Implementation,,Active,14,Syed Abdul Nasir,Junaid Altaf,,,Milestone Based,,"Page, White, Farrer"
+1651,NS - ReBag - Teambased,,Active,14,Syed Abdul Nasir,Azfar Ayub,,,Team Based,,ReBag
+2210,NS - Roxburghe - ERP Implementation,,Active,14,Syed Abdul Nasir,Atif Ashfaq,,,,,Sunlaws Development
+2201,NS - Rugged Suppressors - ERP Implementation,NS ERP Implementation,Active,14,Syed Abdul Nasir,Kamil Mushtaq,2024.10.23,,Milestone Based,993,Rugged Suppressors
+1036,NS - Signifyd Integration - Team based,,Active,14,Syed Abdul Nasir,S M Zeeshan Hussain,,,,,Signifyd
+2130,NS - SKirby Company - ERP Implementation,,Active,14,Syed Abdul Nasir,Junaid Altaf,,,Milestone Based,1340,"S. Kirby & Company, Inc."
+1965,NS - Spotlight - Connectors and Integration,,Active,14,Syed Abdul Nasir,Muhammad Kazim Hussain,,,Hourly,,SpotLight Oral Care
+1803,NS - SpotLight Oral Care,,Active,14,Syed Abdul Nasir,Azfar Ayub,,,Milestone Based,650,SpotLight Oral Care
+1782,NS - Sprinturf - Advanced Customer Support,,Active,14,Syed Abdul Nasir,Nadeem Ashraf,,,Team Based,,Sprinturf LLC
+2031,NS - Srixon - ERP Implementation,,Active,14,Syed Abdul Nasir,Atif Ashfaq,,,Hourly,3405,Srixon
+2035,NS - Support CRs,,Active,14,Syed Abdul Nasir,Aiman Rizwan,,,Hourly,,Folio3
+2328,NS - Team - Leaves,,Active,14,Syed Abdul Nasir,Nadeem Ashraf,,,,,Folio3 NetSuite
+2376,NS - Team BlueSky - Customization,,Active,14,Syed Abdul Nasir,S M Zeeshan Hussain,,,,200,NetSuite Team BlueSky
+1317,NS - Team Litzen - ERP Implementation & Customization,,Active,14,Syed Abdul Nasir,Syed Ovais Ashraf,2021.05.26,,Milestone Based,,Team Litzen
+1971,NS - The Frankie Shop - Implementation / Customization,,Active,14,Syed Abdul Nasir,S M Zeeshan Hussain,,,,,The Frankie Shop
+762,NS - Training,Training Project for Internal Allocation,Active,14,Syed Abdul Nasir,Kamil Mushtaq,2018.10.29,2026.08.31,Hourly,999999,Folio3
+2295,NS - Tropic SkinCare - Teambased Support,,Active,14,Syed Abdul Nasir,Junaid Altaf,,,Team Based,,Tropic Skin Care
+363,NS - Unified Connector,,Active,14,Syed Abdul Nasir,Umair Ali,,,Team Based,,Folio3
+2496,NS - Union Roasted - Cropster,,Active,14,Syed Abdul Nasir,Muaz Mustafa,,,Milestone Based,162,Lunar Ventures Limited
+2280,NS - United California Glass and Doors - Mulesoft SF Integration,,Active,14,Syed Abdul Nasir,S M Zeeshan Hussain,,,Hourly,1200,United California Glass and Doors Inc.
+2517,NS - Versare Solutions - BigCommerce Connector,,Active,14,Syed Abdul Nasir,Bisma Abid,2026.01.14,,Milestone Based,100,Versare Solutions
+2572,NS - Views - Propertese,,Active,14,Syed Abdul Nasir,Zaid Aslam,2026.05.05,2026.08.31,Milestone Based,,Views (UK)
+2509,NS - WS Display - Shopify Connector,,Active,14,Syed Abdul Nasir,Umair Ali,,,Milestone Based,285,WSDisplay
+2400,NS- Protiviti - Sesame - Teambased support,,Active,14,Syed Abdul Nasir,Azfar Ayub,,,Team Based,,Protiviti
+1295,NS Skydio - Dev Team Based,50% dev team based for 6 months,Active,14,Syed Abdul Nasir,Kamil Mushtaq,2021.04.19,,Team Based,,"Skydio, Inc."
+2533,Piedmontese NetSuite Enhancement & Customization,,Active,14,Syed Abdul Nasir,Navaid Ahmed,,,Hourly,1400,"Great Plains, LLC"

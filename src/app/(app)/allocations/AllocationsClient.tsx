@@ -7,7 +7,7 @@ import type { Role, JobTitle } from "@/types/enums";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type User       = { id: string; name: string | null; email: string | null; image: string | null; capacity: number; role: Role; jobTitle: JobTitle | null; divisionId: string | null };
+type User       = { id: string; name: string | null; email: string | null; image: string | null; capacity: number; role: Role; jobTitle: JobTitle | null; divisionId: string | null; department: string | null };
 type DivisionRef = { id: string; name: string; code: string; color: string };
 type Project    = { id: string; name: string; code: string; color: string };
 type Task       = { id: string; name: string } | null;
@@ -119,6 +119,11 @@ function statusForPct(pct: number) {
   return "ok";
 }
 
+/** Round to nearest whole number for display */
+function r1(n: number): string {
+  return String(Math.round(n));
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function AllocCell({ hours, capacity, unit }: { hours: number; capacity: number; unit: string }) {
@@ -127,8 +132,8 @@ function AllocCell({ hours, capacity, unit }: { hours: number; capacity: number;
   return (
     <div className={`alloc-cell ${status}`} style={{ width: "100%" }}>
       <div className="figures">
-        <span className="hrs">{unit === "pct" ? `${pct}%` : `${hours}h`}</span>
-        <span className="pct">{unit === "pct" ? `${hours}h` : `${pct}%`}</span>
+        <span className="hrs">{unit === "pct" ? `${pct}%` : `${r1(hours)}h`}</span>
+        <span className="pct">{unit === "pct" ? `${r1(hours)}h` : `${pct}%`}</span>
       </div>
       <div className="bar"><span style={{ width: `${Math.min(100, pct)}%` }} /></div>
     </div>
@@ -251,11 +256,23 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
   const canEdit = !isHistorical && ["ADMIN", "DIVISION_OWNER", "PROJECT_MANAGER"].includes(currentUserRole);
 
   const [divisionFilter, setDivisionFilter] = useState("");
+  const [roleFilter,     setRoleFilter]     = useState("");
 
-  // Users visible in the grid — filtered by division
+  // Unique role options derived from loaded users (only non-null departments)
+  const roleOptions = useMemo(() => {
+    const seen = new Set<string>();
+    users.forEach((u) => { if (u.department) seen.add(u.department); });
+    return Array.from(seen).sort();
+  }, [users]);
+
+  // Users visible in the grid — filtered by division AND role
   const visibleUsers = useMemo(
-    () => divisionFilter ? users.filter((u) => u.divisionId === divisionFilter) : users,
-    [users, divisionFilter]
+    () => users.filter((u) => {
+      if (divisionFilter && u.divisionId !== divisionFilter) return false;
+      if (roleFilter     && u.department  !== roleFilter)    return false;
+      return true;
+    }),
+    [users, divisionFilter, roleFilter]
   );
 
   // Derived conflict warnings — computed after all state is declared
@@ -462,6 +479,12 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
               {divisions.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.code})</option>)}
             </select>
           )}
+          {roleOptions.length > 0 && (
+            <select className="select-sm" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+              <option value="">All roles</option>
+              {roleOptions.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          )}
           <div className="seg">
             <button className={unit === "hrs" ? "active" : ""} onClick={() => setUnit("hrs")}>Hours</button>
             <button className={unit === "pct" ? "active" : ""} onClick={() => setUnit("pct")}>%</button>
@@ -506,7 +529,7 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
         </div>
         <div className={`kpi ${grandPct > 100 ? "bad" : grandPct >= 90 ? "warn" : ""}`}>
           <div className="kpi-label">Demand</div>
-          <div className="kpi-value">{grandH}<span className="unit">h</span></div>
+          <div className="kpi-value">{r1(grandH)}<span className="unit">h</span></div>
           <div className="kpi-meta"><span className="chip">{grandPct}%</span> of capacity</div>
         </div>
         <div className={`kpi ${overCount ? "bad" : "ok"}`}>
@@ -516,7 +539,7 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
         </div>
         <div className="kpi">
           <div className="kpi-label">Idle bandwidth</div>
-          <div className="kpi-value">{Math.max(0, grandCap - grandH)}<span className="unit">h</span></div>
+          <div className="kpi-value">{r1(Math.max(0, grandCap - grandH))}<span className="unit">h</span></div>
           <div className="kpi-meta">Available for new work</div>
         </div>
       </div>
@@ -573,7 +596,7 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
                     ))}
                     <div key={`total-${u.id}`} className="ag-cell ag-row-person" style={{ padding: 0 }}>
                       <div className={`total-cell ${totalPct > 100 ? "bad" : ""}`}>
-                        <span className="t-h">{totalH}h</span>
+                        <span className="t-h">{r1(totalH)}h</span>
                         <span className="t-p">{totalPct}% · cap {totalCap}h</span>
                       </div>
                     </div>
@@ -598,13 +621,13 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
                               onClick={() => canEdit && openEdit(entry, u.id, projectId, proj.name, u.name ?? u.email ?? "?")}
                               title={canEdit ? "Click to edit" : undefined}
                             >
-                              {entry.hours > 0 ? `${entry.hours}h` : <span className="muted" style={{ color: "var(--text-muted)" }}>-</span>}
+                              {entry.hours > 0 ? `${r1(entry.hours)}h` : <span className="muted" style={{ color: "var(--text-muted)" }}>-</span>}
                               {canEdit && entry.hours === 0 && <span className="edit-hint" style={{ marginLeft: 4, opacity: 0.4, fontSize: 10 }}>+</span>}
                             </div>
                           ))}
                           <div key={`task-sum-${key}`} className="ag-cell ag-row-task" style={{ justifyContent: "flex-end" }}>
                             <span className="mono" style={{ color: "var(--text-secondary)", fontSize: 12 }}>
-                              {entries.reduce((s, e) => s + e.hours, 0)}h
+                              {r1(entries.reduce((s, e) => s + e.hours, 0))}h
                             </span>
                           </div>
                         </>
@@ -620,7 +643,7 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
                 <div key={`total-${i}`} className="ag-cell" style={{ background: "var(--surface-2)", padding: 0 }}>
                   <div className="alloc-cell" style={{ width: "100%" }}>
                     <div className="figures">
-                      <span className="hrs">{t.h}h</span>
+                      <span className="hrs">{r1(t.h)}h</span>
                       <span className="pct">{t.pct}% · cap {t.cap}h</span>
                     </div>
                     <div className="bar">
@@ -631,7 +654,7 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
               ))}
               <div className="ag-cell" style={{ background: "var(--surface-2)", padding: 0 }}>
                 <div className="total-cell">
-                  <span className="t-h">{grandH}h</span>
+                  <span className="t-h">{r1(grandH)}h</span>
                   <span className="t-p">{grandPct}% of {grandCap}h</span>
                 </div>
               </div>

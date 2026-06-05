@@ -3,21 +3,25 @@ import { prisma } from "@/lib/prisma";
 import { ok, err, unauthorized } from "@/lib/apiResponse";
 import { revalidateTag } from "next/cache";
 
-function mapRole(rmRole: string): { role: string; jobTitle: string | null } {
+// Derive app role from the RM tool's coarse role column.
+// jobTitle is taken directly from the Position column — stored as-is.
+function mapRole(rmRole: string): { role: string } {
+  switch (rmRole.trim().toLowerCase()) {
+    case "pm": return { role: "PROJECT_MANAGER" };
+    default:   return { role: "MEMBER" };
+  }
+}
+
+// Map RM Role column → readable department label stored on User.department
+function mapDepartment(rmRole: string): string | null {
   switch (rmRole.trim().toLowerCase()) {
     case "dev":
-    case "ui":
-      return { role: "MEMBER", jobTitle: "DEVELOPER" };
-    case "qa":
-      return { role: "MEMBER", jobTitle: "QA_ENGINEER" };
-    case "pm":
-      return { role: "PROJECT_MANAGER", jobTitle: "PROJECT_MANAGER" };
-    case "fc":
-      return { role: "MEMBER", jobTitle: "FUNCTIONAL_CONSULTANT" };
-    case "product manager":
-      return { role: "MEMBER", jobTitle: "PRODUCT_MANAGER" };
-    default:
-      return { role: "MEMBER", jobTitle: null };
+    case "ui":            return "Developer";
+    case "qa":            return "QA Engineer";
+    case "pm":            return "Project Manager";
+    case "fc":            return "Functional Consultant";
+    case "product manager": return "Product Manager";
+    default:              return null;
   }
 }
 
@@ -35,10 +39,11 @@ export async function POST(req: Request) {
   const body = await req.json();
   const { rows } = body as {
     rows: Array<{
-      fomsId:             string;
-      name:               string;
-      email:              string;
-      rmRole:             string;
+      fomsId:              string;
+      name:                string;
+      email:               string;
+      rmRole:              string;
+      position?:           string;
       dominantDirectorId?: string;
     }>;
   };
@@ -50,17 +55,24 @@ export async function POST(req: Request) {
   const errors:  { fomsId: string; message: string }[] = [];
 
   for (const row of rows) {
-    const { fomsId, name, email, rmRole, dominantDirectorId } = row;
+    const { fomsId, name, email, rmRole, position = "", dominantDirectorId } = row;
 
     try {
-      // Skip directors already imported in Step 2
+      // Skip directors already imported in Step 2 — but backfill jobTitle if missing
       const existingByExtId = await prisma.user.findFirst({ where: { externalId: fomsId } });
       if (existingByExtId) {
+        const updates: Record<string, string> = {};
+        if (!existingByExtId.jobTitle  && position)            updates.jobTitle   = position;
+        if (!existingByExtId.department && mapDepartment(rmRole)) updates.department = mapDepartment(rmRole)!;
+        if (Object.keys(updates).length)
+          await prisma.user.update({ where: { id: existingByExtId.id }, data: updates });
         skipped.push(fomsId);
         continue;
       }
 
-      const { role, jobTitle } = mapRole(rmRole);
+      const { role }   = mapRole(rmRole);
+      const jobTitle   = position || null;
+      const department = mapDepartment(rmRole);
 
       // Resolve division from dominant director
       let divisionId: string | null = null;
@@ -80,11 +92,12 @@ export async function POST(req: Request) {
           data: {
             externalId: fomsId,
             role:       existing.role === "ADMIN" ? existing.role : role,
-            jobTitle:   jobTitle ?? existing.jobTitle,
+            jobTitle:   existing.jobTitle ?? jobTitle,
+            department: existing.department ?? department,
             divisionId: existing.divisionId ?? divisionId,
           },
         });
-        skipped.push(fomsId); // exists but updated
+        skipped.push(fomsId);
       } else {
         await prisma.user.create({
           data: {
@@ -92,6 +105,7 @@ export async function POST(req: Request) {
             email,
             role,
             jobTitle,
+            department,
             externalId: fomsId,
             divisionId,
             isActive:   true,

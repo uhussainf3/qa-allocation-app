@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 
 // ─── Legacy allocation import ────────────────────────────────────────────────
@@ -35,6 +35,7 @@ function parseCsvText(text: string): { headers: string[]; rows: Record<string, s
 }
 
 function LegacyImport() {
+  const legacyFileRef = useRef<HTMLInputElement>(null);
   const [step, setStep]       = useState(0);
   const [rows, setRows]       = useState<LegacyRow[]>([]);
   const [result, setResult]   = useState<LegacyResult | null>(null);
@@ -92,7 +93,17 @@ function LegacyImport() {
         <div className="card" style={{ maxWidth: 520 }}>
           <div style={{ fontWeight: 600, marginBottom: 10 }}>Upload CSV</div>
           <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14 }}>Required columns: <code>userEmail</code>, <code>projectCode</code>, <code>weekStart</code> (YYYY-MM-DD), <code>hours</code></p>
-          <input type="file" accept=".csv,.txt" onChange={handleFile} />
+          <input
+            ref={legacyFileRef}
+            type="file"
+            accept=".csv,.txt"
+            style={{ display: "none" }}
+            onChange={handleFile}
+          />
+          <div className="row" style={{ gap: 8, alignItems: "center", marginBottom: 4 }}>
+            <button type="button" className="btn" onClick={() => legacyFileRef.current?.click()}>Choose file</button>
+            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>CSV only</span>
+          </div>
           {fileError && <div style={{ color: "var(--bad)", fontSize: 13, marginTop: 10 }}>{fileError}</div>}
         </div>
       )}
@@ -159,6 +170,10 @@ type RMPhase   = "idle" | "files" | "preview" | "running" | "done";
 type PhaseResult = { label: string; created: number; skipped: number; errors: { row?: number; directorId?: string; projectId?: string; fomsId?: string; message: string }[] };
 
 function RMImport() {
+  const empRef  = useRef<HTMLInputElement>(null);
+  const projRef = useRef<HTMLInputElement>(null);
+  const rmRef   = useRef<HTMLInputElement>(null);
+
   const [phase, setPhase]               = useState<RMPhase>("idle");
   const [employeeFile, setEmployeeFile] = useState<File | null>(null);
   const [projectsFile, setProjectsFile] = useState<File | null>(null);
@@ -170,7 +185,7 @@ function RMImport() {
   const [running, setRunning]           = useState(false);
 
   // Parsed data
-  type EmpRow  = { fomsId: string; name: string; email: string; rmRole: string };
+  type EmpRow  = { fomsId: string; name: string; email: string; rmRole: string; position: string };
   type ProjRow = { projectId: string; name: string; status: string; directorId: string; startDate: string; endDate: string };
   type AllocRow = { employeeId: string; projectId: string; allocation: number; startDate: string; endDate: string };
 
@@ -216,9 +231,10 @@ function RMImport() {
         if (fomsId && email) {
           empParsed.push({
             fomsId,
-            name:   r["Employee"]?.trim() ?? "",
+            name:     r["Employee"]?.trim() ?? "",
             email,
-            rmRole: r["Role"]?.trim() ?? "",
+            rmRole:   r["Role"]?.trim() ?? "",
+            position: r["Position"]?.trim() ?? "",
           });
         }
       }
@@ -347,16 +363,29 @@ function RMImport() {
     <div className="card" style={{ maxWidth: 540 }}>
       <div style={{ fontWeight: 600, marginBottom: 16 }}>Upload RM Tool CSVs</div>
 
-      {[
-        { label: "Employee_RM.csv", desc: "All employees + directors", set: setEmployeeFile, val: employeeFile },
-        { label: "Projects File.csv", desc: "All projects with director assignments", set: setProjectsFile, val: projectsFile },
-        { label: "RM - Data.csv", desc: "All allocation rows", set: setRMDataFile, val: rmDataFile },
-      ].map(({ label, desc, set, val }) => (
+      {([
+        { label: "Employee_RM.csv",  desc: "All employees + directors",              ref: empRef,  set: setEmployeeFile, val: employeeFile },
+        { label: "Projects File.csv", desc: "All projects with director assignments", ref: projRef, set: setProjectsFile, val: projectsFile },
+        { label: "RM - Data.csv",    desc: "All allocation rows",                    ref: rmRef,   set: setRMDataFile,   val: rmDataFile   },
+      ] as const).map(({ label, desc, ref, set, val }) => (
         <div key={label} style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{label}</div>
           <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>{desc}</div>
-          <input type="file" accept=".csv,.txt" onChange={(e) => { const f = e.target.files?.[0]; if (f) set(f); }} />
-          {val && <span style={{ fontSize: 12, color: "var(--ok)", marginLeft: 8 }}>✓ {val.name}</span>}
+          <input
+            ref={ref}
+            type="file"
+            accept=".csv,.txt"
+            style={{ display: "none" }}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) set(f); }}
+          />
+          <div className="row" style={{ gap: 8, alignItems: "center" }}>
+            <button type="button" className="btn" onClick={() => ref.current?.click()}>
+              Choose file
+            </button>
+            <span style={{ fontSize: 13, color: val ? "var(--ok)" : "var(--text-muted)" }}>
+              {val ? `✓ ${val.name}` : "No file chosen"}
+            </span>
+          </div>
         </div>
       ))}
 
@@ -453,6 +482,7 @@ function RMImport() {
 // ─── Weekly batch upload ─────────────────────────────────────────────────────
 
 function WeeklyUpload() {
+  const fileRef = useRef<HTMLInputElement>(null);
   const [file,        setFile]        = useState<File | null>(null);
   const [batchLabel,  setBatchLabel]  = useState(`RM Week — ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`);
   const [phase,       setPhase]       = useState<"idle" | "preview" | "confirming" | "done">("idle");
@@ -539,8 +569,21 @@ function WeeklyUpload() {
 
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>RM - Data.csv</div>
-        <input type="file" accept=".csv,.txt" onChange={handleFile} />
-        {file && <span style={{ fontSize: 12, color: "var(--ok)", marginLeft: 8 }}>✓ {file.name}</span>}
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,.txt"
+          style={{ display: "none" }}
+          onChange={handleFile}
+        />
+        <div className="row" style={{ gap: 8, alignItems: "center" }}>
+          <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
+            Choose file
+          </button>
+          <span style={{ fontSize: 13, color: file ? "var(--ok)" : "var(--text-muted)" }}>
+            {file ? `✓ ${file.name}` : "No file chosen"}
+          </span>
+        </div>
       </div>
 
       {parseError && <div style={{ color: "var(--bad)", fontSize: 13, marginBottom: 10 }}>{parseError}</div>}

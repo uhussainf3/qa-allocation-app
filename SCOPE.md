@@ -60,6 +60,10 @@ Claude reads this at the start of every session and updates it as features are c
 | # | Feature | Status | Notes |
 |---|---------|--------|-------|
 | 1 | Job Title management UI | ✅ Done | Settings page — add/edit/delete; TeamClient dropdown driven from DB |
+| 2 | RM Tool Data Migration — Schema | ✅ Done | externalId on User+Project; AllocationBatch model; batchId on Allocation; db push to dev |
+| 3 | RM Tool Data Migration — API routes | ✅ Done | POST /api/import/divisions, /projects, /employees, /allocations |
+| 4 | RM Tool Data Migration — Import UI | ✅ Done | RM Tool Migration tab: upload 3 CSVs, client-side parse, 4-stage progress wizard |
+| 5 | Weekly Batch Upload UI | ✅ Done | Weekly Upload tab (ADMIN+DO): dry-run preview → confirm import; batch selector on Allocations page; old batches read-only with banner |
 
 ---
 

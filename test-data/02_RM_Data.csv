@@ -1,0 +1,232 @@
+Sr #,Project ID,Project Name,Employee ID,Emp Name,Billing Type,Allocation %,Billing %,start Dte,End Date,Allocation type,allocation status,Director ID,Director Name
+475,1966,NS - ABC Parts - NetSuite ERP,1288,Arslan Qamar,Team Based,25,25,1-May-26,31-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+476,2259,NS - Account Management,795,Muhammad Faizan Khan,Hourly,13,13,2-Jun-26,31-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+477,2521,NS - Alibi Security - BigCommerce Connector,657,Amin Ur Rehman,Hourly,25,25,4-May-26,13-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+478,2521,NS - Alibi Security - BigCommerce Connector,714,Imtiaz Ahmed Shaikh,Hourly,25,25,4-May-26,13-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+479,2521,NS - Alibi Security - BigCommerce Connector,965,Muaz Mustafa,Hourly,13,13,16-Mar-26,4-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+480,2521,NS - Alibi Security - BigCommerce Connector,1891,Muhammad Nasiruddin Mahmood,Hourly,50,50,30-Mar-26,13-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+481,2551,NS - ASAP Skin Products - Shopify Integration,965,Muaz Mustafa,Hourly,12,12,25-Mar-26,4-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+482,2551,NS - ASAP Skin Products - Shopify Integration,2185,Muhammad Sarim Hassan,Hourly,75,75,11-May-26,13-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+483,2551,NS - ASAP Skin Products - Shopify Integration,1036,Muhammad Tayyab Mansoor,Hourly,50,50,4-May-26,13-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+484,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,927,Abdullah Abid,Hourly,100,100,1-Jun-26,30-Sep-26,Billed,Allocated,14,Syed Abdul Nasir
+485,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,1027,Hafiz Hunain Akbani,Hourly,75,75,1-Jun-26,30-Sep-26,Billed,Allocated,14,Syed Abdul Nasir
+486,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,2233,Maheen Khan,Hourly,100,100,27-Apr-26,30-Sep-26,Billed,Allocated,14,Syed Abdul Nasir
+487,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,1855,Mohammad Ahmad,Hourly,75,75,1-Jun-26,31-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+488,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,1530,Muhammad Aqib,Hourly,75,75,1-Jun-26,30-Sep-26,Billed,Allocated,14,Syed Abdul Nasir
+489,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,683,Muhammad Faisal,Hourly,25,25,1-Jun-26,30-Sep-26,Billed,Allocated,14,Syed Abdul Nasir
+490,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,1892,Muhammad Fuzail Ahmed,Hourly,50,50,7-Jun-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+491,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,1892,Muhammad Fuzail Ahmed,Hourly,100,100,21-May-26,6-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+492,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,2076,Muhammad Haris Karar,Hourly,100,100,1-Jun-26,30-Sep-26,Billed,Allocated,14,Syed Abdul Nasir
+493,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,968,Muhammad Kazim Hussain,Hourly,30,30,1-Aug-26,30-Sep-26,Billed,Allocated,14,Syed Abdul Nasir
+494,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,968,Muhammad Kazim Hussain,Hourly,30,30,9-Feb-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+495,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,1494,Muhammad Saddiqain Ali Shah,Hourly,75,75,1-Jun-26,30-Sep-26,Billed,Allocated,14,Syed Abdul Nasir
+496,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,1036,Muhammad Tayyab Mansoor,Hourly,50,50,25-May-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+497,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,1216,Muhammad Ubaid Raza,Hourly,75,75,1-Jun-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+498,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,1386,Shah Saqib,Hourly,50,50,7-Jun-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+499,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,1386,Shah Saqib,Hourly,100,100,21-May-26,6-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+500,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,291,Shuja Zaka Khan,Hourly,75,75,1-Jun-26,31-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+501,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,1543,Umar Javed,Hourly,75,75,1-Jun-26,31-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+502,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,451,Zeeshan Ahmed Siddiqui,Hourly,75,75,1-Jul-26,31-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+503,2396,NS - Ascot Capital Group - ERP Implementation and Customizations,451,Zeeshan Ahmed Siddiqui,Hourly,75,75,27-Apr-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+504,2540,NS - Ascot Capital Group - Hubspot Connector,1476,Karim Sajjad,Hourly,25,25,19-May-26,6-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+505,2540,NS - Ascot Capital Group - Hubspot Connector,968,Muhammad Kazim Hussain,Hourly,15,15,4-May-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+506,2540,NS - Ascot Capital Group - Hubspot Connector,1543,Umar Javed,Hourly,25,25,7-May-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+507,2462,NS - Ascot Capital Group - SCA Implementation and Customizations,513,Adeel Ahmed,Hourly,75,75,15-Jun-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+508,2462,NS - Ascot Capital Group - SCA Implementation and Customizations,714,Imtiaz Ahmed Shaikh,Hourly,50,50,1-Jun-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+509,2462,NS - Ascot Capital Group - SCA Implementation and Customizations,1353,Mudassir Ahmed Kidwai,Hourly,75,75,31-Mar-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+510,2462,NS - Ascot Capital Group - SCA Implementation and Customizations,1530,Muhammad Aqib,Hourly,25,25,1-Apr-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+511,2462,NS - Ascot Capital Group - SCA Implementation and Customizations,612,Muhammad Azhar,Hourly,100,100,19-May-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+512,2462,NS - Ascot Capital Group - SCA Implementation and Customizations,1356,Muhammad Nabeel Ahmed,Hourly,50,50,12-Feb-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+513,2462,NS - Ascot Capital Group - SCA Implementation and Customizations,2205,Muhammad Taimoor,Hourly,100,75,1-Jun-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+514,2462,NS - Ascot Capital Group - SCA Implementation and Customizations,581,Syed Aoun Raza,Hourly,100,100,11-May-26,17-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+515,2462,NS - Ascot Capital Group - SCA Implementation and Customizations,454,Umair Ali,Hourly,25,25,27-Mar-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+516,2462,NS - Ascot Capital Group - SCA Implementation and Customizations,293,Uzair Ishaq,Hourly,50,50,9-Feb-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+517,1148,NS - Bank & Vogue Development Bundle,563,Muhammad Zain Ul Abdeen -NS,Team Based,25,25,2-Feb-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+518,2036,NS - BPQs,2206,Bisma Abid,Hourly,37,37,1-Jun-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+519,2429,NS - CalfTech - Discovery,925,Junaid Altaf,Hourly,10,10,1-Jun-26,20-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+520,2429,NS - CalfTech - Discovery,406,Wahaj Ahmed Ansari,Hourly,25,25,1-Jun-26,20-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+521,2498,NS - CalfTech - Phase 1 - ERP Implementation,1280,Ayaz Ahmed Khan,Hourly,60,60,2-Mar-26,27-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+522,2498,NS - CalfTech - Phase 1 - ERP Implementation,925,Junaid Altaf,Hourly,25,25,16-May-26,27-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+523,2498,NS - CalfTech - Phase 1 - ERP Implementation,1049,Rushan Riaz,Hourly,50,50,2-Apr-26,27-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+524,2498,NS - CalfTech - Phase 1 - ERP Implementation,1880,Sheikh Ishaq Kamran,Hourly,25,25,2-Jun-26,6-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+525,2498,NS - CalfTech - Phase 1 - ERP Implementation,2001,Syed Talha Alam,Hourly,50,50,21-Apr-26,27-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+526,2570,NS - Canyon Coffee - Cropster Connector,965,Muaz Mustafa,Hourly,12,12,7-May-26,4-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+527,2552,NS - Caravela Coffee - Customization,211,S M Zeeshan Hussain,Hourly,20,20,1-Jun-26,13-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+528,2529,NS - Caravela Coffee - Shopify Connector,1351,Shawais Ismail,Hourly,25,25,6-Apr-26,14-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+529,2529,NS - Caravela Coffee - Shopify Connector,1351,Shawais Ismail,Hourly,50,50,15-Jun-26,2-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+530,2529,NS - Caravela Coffee - Shopify Connector,1566,Zaid Aslam,Hourly,12,12,23-Feb-26,28-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+531,1079,NS - Channel Advisor Integration,293,Uzair Ishaq,Team Based,50,50,2-Feb-26,2-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+532,924,NS - ChromaDex - Team based,500,Syed Muhammad Usman Hussain,Team Based,50,50,2-Jan-26,1-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+533,2223,NS - Chubby Gorilla - MG2 Connector Implementation,965,Muaz Mustafa,Hourly,13,13,26-Jan-26,13-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+534,2223,NS - Chubby Gorilla - MG2 Connector Implementation,500,Syed Muhammad Usman Hussain,Hourly,25,25,5-Jan-26,13-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+535,1943,NS - Civil Clothing - CMT (Team Based),1918,Moazzam Iqbal Gill,Hourly,25,25,1-Apr-26,2-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+536,1943,NS - Civil Clothing - CMT (Team Based),1018,Muhammad Danish Khanani,Hourly,25,25,1-Apr-26,2-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+537,1943,NS - Civil Clothing - CMT (Team Based),211,S M Zeeshan Hussain,,1,0,1-Apr-26,31-Aug-26,Internal,Allocated,14,Syed Abdul Nasir
+538,787,NS - Connector Support,1378,Asadullah Shaikh,Team Based,100,100,1-May-26,31-Oct-26,Billed,Allocated,14,Syed Abdul Nasir
+539,787,NS - Connector Support,1327,Muhammad Ahmed Siddiqui,Team Based,100,100,1-May-26,31-Oct-26,Billed,Allocated,14,Syed Abdul Nasir
+540,787,NS - Connector Support,2160,Muhammad Hani,Team Based,100,100,1-Jun-26,31-Oct-26,Billed,Allocated,14,Syed Abdul Nasir
+541,787,NS - Connector Support,1054,Shahzaib Ahmed,Team Based,100,100,1-May-26,31-Oct-26,Billed,Allocated,14,Syed Abdul Nasir
+542,787,NS - Connector Support,1663,Shahzain Shafique,Team Based,100,100,1-May-26,31-Oct-26,Billed,Allocated,14,Syed Abdul Nasir
+543,787,NS - Connector Support,2236,Tabish,Team Based,100,100,4-May-26,31-Oct-26,Billed,Allocated,14,Syed Abdul Nasir
+544,354,NS - Daston,168,Faisal Moid,Team Based,100,100,1-May-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+545,354,NS - Daston,356,Nadeem Ashraf,,1,0,1-May-26,31-Jul-26,Internal,Allocated,14,Syed Abdul Nasir
+546,2397,NS - E&S Trading Customizations,1913,Saoud Ahmed Khan,Team Based,50,50,5-Jan-26,3-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+552,2265,NS - Edgemine - NetSuite Faire Integration,454,Umair Ali,Hourly,15,15,11-May-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+553,2266,NS - Edgemine - NetSuite FashionGo Integration,795,Muhammad Faizan Khan,Hourly,25,25,14-May-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+554,2038,NS - Emirates Properties - PROPERTESE,1351,Shawais Ismail,Hourly,75,75,11-May-26,14-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+555,2038,NS - Emirates Properties - PROPERTESE,820,Shoaib Ghalib,Hourly,50,50,22-May-26,7-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+556,2545,NS - Emirates Properties - PROPERTESE Support,820,Shoaib Ghalib,Hourly,25,25,13-Mar-26,12-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+557,2545,NS - Emirates Properties - PROPERTESE Support,1566,Zaid Aslam,Hourly,12,12,13-Mar-26,12-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+558,1285,NS - EVO Systems - Advanced NS SCA Support (T&M),513,Adeel Ahmed,Hourly,25,25,15-Jun-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+559,1285,NS - EVO Systems - Advanced NS SCA Support (T&M),1353,Mudassir Ahmed Kidwai,Hourly,25,25,1-Jun-26,6-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+560,1285,NS - EVO Systems - Advanced NS SCA Support (T&M),356,Nadeem Ashraf,Hourly,10,10,1-Jun-26,3-Sep-26,Billed,Allocated,14,Syed Abdul Nasir
+561,699,NS - Evo Systems - NS ERP Customizations Services (T&M),211,S M Zeeshan Hussain,,1,0,1-Apr-26,31-Jul-26,Internal,Allocated,14,Syed Abdul Nasir
+562,699,NS - Evo Systems - NS ERP Customizations Services (T&M),559,Saif Al Malook Abbasi,Hourly,50,50,1-Jan-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+563,2525,NS - Fredin Brothers - ERP Implementation,1176,Ali Salman Bin Mukhtar,Hourly,50,50,26-Mar-26,1-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+564,2525,NS - Fredin Brothers - ERP Implementation,464,Kamil Mushtaq,Hourly,25,25,4-Feb-26,1-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+565,2525,NS - Fredin Brothers - ERP Implementation,2232,Mishal Iqbal,Hourly,100,100,27-Apr-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+566,2525,NS - Fredin Brothers - ERP Implementation,1549,Syeda Sukaina Zehra Zaidi,Hourly,50,50,4-Feb-26,1-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+570,2399,NS - Grafton - NS Support,1489,Talha Ahmad Siddiqui,Hourly,12,12,4-May-26,1-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+571,2467,NS - Greene Farm - ERP Implementation,1207,Atif Ashfaq,Hourly,25,25,10-Feb-26,3-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+572,2467,NS - Greene Farm - ERP Implementation,1489,Talha Ahmad Siddiqui,Hourly,38,38,1-Apr-26,3-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+573,1708,NS - GroWell ERP - Team Based,1280,Ayaz Ahmed Khan,Team Based,15,15,6-Apr-26,7-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+579,2293,NS - Hamilton Fraser - ERP Support (T&M),1280,Ayaz Ahmed Khan,Hourly,25,25,2-Jan-26,27-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+580,2293,NS - Hamilton Fraser - ERP Support (T&M),925,Junaid Altaf,Hourly,5,5,2-Jan-26,27-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+581,2293,NS - Hamilton Fraser - ERP Support (T&M),1018,Muhammad Danish Khanani,Hourly,12,12,2-Jan-26,27-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+584,2294,NS - HL HALL - Teambased Support,925,Junaid Altaf,Team Based,5,5,2-Jan-26,27-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+585,2294,NS - HL HALL - Teambased Support,1701,Talha bin Khalid,Team Based,50,50,2-Jan-26,27-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+586,2364,NS - Homeward bound - ERP Implementation,1562,Hassaan Khalid,Team Based,25,25,8-Jun-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+588,2364,NS - Homeward bound - ERP Implementation,464,Kamil Mushtaq,Team Based,6,6,8-Jun-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+590,2468,NS - Horseware - T&M,2099,Hamza Ehtesham Farooq,Hourly,25,25,16-Mar-26,1-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+591,2468,NS - Horseware - T&M,925,Junaid Altaf,Hourly,10,10,16-Mar-26,1-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+592,2468,NS - Horseware - T&M,1356,Muhammad Nabeel Ahmed,Hourly,5,5,26-Mar-26,1-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+593,2353,NS - InGenius - SmartCare,1675,Sofiyan Sohail,Hourly,25,25,6-Jul-26,3-Oct-26,Billed,Allocated,14,Syed Abdul Nasir
+594,2353,NS - InGenius - SmartCare,1675,Sofiyan Sohail,Hourly,50,50,5-Jan-26,4-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+595,2535,NS - Janco Electronics - NS ERP Support (Team based),1562,Hassaan Khalid,Team Based,25,25,1-Mar-26,9-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+596,2535,NS - Janco Electronics - NS ERP Support (Team based),356,Nadeem Ashraf,,1,0,1-Mar-26,9-Jul-26,Internal,Allocated,14,Syed Abdul Nasir
+599,2490,NS - Kingspan Solen Integration,464,Kamil Mushtaq,Hourly,12,12,21-May-26,13-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+600,2490,NS - Kingspan Solen Integration,563,Muhammad Zain Ul Abdeen -NS,Hourly,50,50,21-May-26,13-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+601,2550,NS - Kyriba - Avalara Deployment Project,1341,Lai-Yi Cheung,Hourly,13,13,25-Mar-26,27-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+602,2550,NS - Kyriba - Avalara Deployment Project,1494,Muhammad Saddiqain Ali Shah,Hourly,25,25,25-Mar-26,27-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+603,2550,NS - Kyriba - Avalara Deployment Project,906,Muhammad Tahir Ansari,Hourly,25,25,25-Mar-26,27-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+604,2550,NS - Kyriba - Avalara Deployment Project,356,Nadeem Ashraf,Hourly,20,20,1-Jun-26,27-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+605,2550,NS - Kyriba - Avalara Deployment Project,2234,Nisa Fatima,Hourly,100,100,30-Apr-26,1-Oct-26,Billed,Allocated,14,Syed Abdul Nasir
+606,2571,NS - LisaYang - Shopify Connector Consolidation,2206,Bisma Abid,Hourly,13,13,31-May-26,15-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+608,2367,NS - Managed Services Program,356,Nadeem Ashraf,Hourly,25,25,9-Mar-26,30-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+609,2587,NS - Margaret O''Leary,705,Azfar Ayub,Hourly,25,25,1-Jun-26,31-Oct-26,Billed,Allocated,14,Syed Abdul Nasir
+610,2587,NS - Margaret O''Leary,2093,Muhammad Sharjeel Khan,Hourly,50,50,1-Jun-26,31-Oct-26,Billed,Allocated,14,Syed Abdul Nasir
+611,2587,NS - Margaret O''Leary,2103,Sani e Zehra Shroff,Hourly,50,50,1-Jun-26,31-Oct-26,Billed,Allocated,14,Syed Abdul Nasir
+612,2587,NS - Margaret O''Leary,2239,Sufyan Mushtaq,Hourly,100,100,1-Jun-26,31-Oct-26,Billed,Allocated,14,Syed Abdul Nasir
+613,2539,NS - MIT - ERP Implementation,2208,Ali Muhammad Murshid,Hourly,100,100,15-Apr-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+614,2539,NS - MIT - ERP Implementation,2208,Ali Muhammad Murshid,Hourly,50,50,1-Jul-26,30-Sep-26,Billed,Allocated,14,Syed Abdul Nasir
+615,2539,NS - MIT - ERP Implementation,1476,Karim Sajjad,Hourly,25,25,4-May-26,20-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+616,2539,NS - MIT - ERP Implementation,1356,Muhammad Nabeel Ahmed,Hourly,25,25,11-May-26,4-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+617,2539,NS - MIT - ERP Implementation,2241,Priya Parpyani,Hourly,50,50,11-May-26,27-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+618,2539,NS - MIT - ERP Implementation,454,Umair Ali,Hourly,30,30,16-Mar-26,31-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+619,2539,NS - MIT - ERP Implementation,454,Umair Ali,Hourly,25,25,1-Sep-26,30-Sep-26,Billed,Allocated,14,Syed Abdul Nasir
+620,2539,NS - MIT - ERP Implementation,1281,Waqar Fazil,Hourly,50,50,6-Apr-26,30-Sep-26,Billed,Allocated,14,Syed Abdul Nasir
+621,1425,NS - Naked Wardrobe - ERP Implementation,1288,Arslan Qamar,Team Based,25,25,5-Feb-26,7-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+622,2284,NS - NetSuite Ai SuiteMate,657,Amin Ur Rehman,,25,0,1-Jun-26,6-Jun-26,Internal,Allocated,14,Syed Abdul Nasir
+623,2284,NS - NetSuite Ai SuiteMate,1891,Muhammad Nasiruddin Mahmood,,25,0,1-Jun-26,6-Jun-26,Internal,Allocated,14,Syed Abdul Nasir
+624,2284,NS - NetSuite Ai SuiteMate,563,Muhammad Zain Ul Abdeen -NS,,25,0,1-Jun-26,6-Jun-26,Internal,Allocated,14,Syed Abdul Nasir
+625,2292,NS - PDF Solutions - TeamBased Support,925,Junaid Altaf,,0,0,5-Dec-25,6-Jun-26,Shadow,Allocated,14,Syed Abdul Nasir
+629,1306,NS - PMNA - ERP Implementation,1913,Saoud Ahmed Khan,Team Based,25,25,2-Mar-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+630,1165,NS - PROPERTESE,464,Kamil Mushtaq,Team Based,25,25,4-May-26,5-Sep-26,Billed,Allocated,14,Syed Abdul Nasir
+631,1165,NS - PROPERTESE,1892,Muhammad Fuzail Ahmed,,50,0,7-Jun-26,31-Jul-26,Internal,Allocated,14,Syed Abdul Nasir
+632,1165,NS - PROPERTESE,968,Muhammad Kazim Hussain,Team Based,15,15,1-Jun-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+633,1165,NS - PROPERTESE,1351,Shawais Ismail,Team Based,50,50,15-Jun-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+634,1165,NS - PROPERTESE,820,Shoaib Ghalib,Team Based,25,25,21-May-26,28-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+635,1165,NS - PROPERTESE,1566,Zaid Aslam,Team Based,25,25,1-Jun-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+636,2537,NS - Proposal,356,Nadeem Ashraf,,15,0,1-Jun-26,30-Jul-26,Proposal,Allocated,14,Syed Abdul Nasir
+637,2248,NS - Protiviti - Advance Medical Management ERP Implementation & Integrations,705,Azfar Ayub,,1,0,1-Apr-26,30-Jun-26,Internal,Allocated,14,Syed Abdul Nasir
+638,2248,NS - Protiviti - Advance Medical Management ERP Implementation & Integrations,1692,Muhammad Faaiz Qureshi,Team Based,25,25,1-Apr-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+639,2248,NS - Protiviti - Advance Medical Management ERP Implementation & Integrations,1281,Waqar Fazil,Team Based,50,50,1-Apr-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+640,2439,NS - Protiviti - CLC - ERP Implementation,1176,Ali Salman Bin Mukhtar,Hourly,50,50,1-Apr-26,16-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+641,2439,NS - Protiviti - CLC - ERP Implementation,1288,Arslan Qamar,Hourly,50,50,1-Apr-26,16-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+642,2439,NS - Protiviti - CLC - ERP Implementation,2210,Ashley Izundu,Hourly,25,25,1-Apr-26,16-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+643,2439,NS - Protiviti - CLC - ERP Implementation,1027,Hafiz Hunain Akbani,Hourly,25,25,1-Apr-26,16-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+644,2439,NS - Protiviti - CLC - ERP Implementation,356,Nadeem Ashraf,Hourly,30,30,1-Apr-26,16-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+645,2439,NS - Protiviti - CLC - ERP Implementation,2103,Sani e Zehra Shroff,Hourly,100,100,1-Apr-26,16-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+646,1616,NS - Protiviti - LHW - ERP Implementation,2103,Sani e Zehra Shroff,Team Based,10,10,2-Apr-26,2-Oct-26,Billed,Allocated,14,Syed Abdul Nasir
+647,1616,NS - Protiviti - LHW - ERP Implementation,1549,Syeda Sukaina Zehra Zaidi,Team Based,10,10,2-Apr-26,2-Oct-26,Billed,Allocated,14,Syed Abdul Nasir
+648,2440,NS - Protiviti - Vultr - Implementation & Integrations,1645,Abdul Rehman,Hourly,50,50,20-May-26,1-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+649,2440,NS - Protiviti - Vultr - Implementation & Integrations,705,Azfar Ayub,Hourly,30,30,1-Mar-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+650,2440,NS - Protiviti - Vultr - Implementation & Integrations,683,Muhammad Faisal,Hourly,25,25,1-Mar-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+651,2440,NS - Protiviti - Vultr - Implementation & Integrations,2110,Muhammad Hammad Qureshi,Hourly,75,75,22-Apr-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+652,2440,NS - Protiviti - Vultr - Implementation & Integrations,2093,Muhammad Sharjeel Khan,Hourly,50,50,1-May-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+653,2440,NS - Protiviti - Vultr - Implementation & Integrations,906,Muhammad Tahir Ansari,Hourly,50,50,1-Mar-26,1-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+654,2440,NS - Protiviti - Vultr - Implementation & Integrations,2179,Osama Younus,Hourly,100,100,1-Jun-26,1-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+655,2440,NS - Protiviti - Vultr - Implementation & Integrations,728,Syed Kumail Mehdi Jafri,Hourly,62,62,1-Apr-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+656,2440,NS - Protiviti - Vultr - Implementation & Integrations,406,Wahaj Ahmed Ansari,Hourly,50,50,1-Mar-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+657,1956,NS - PWF - ERP Implementation,1549,Syeda Sukaina Zehra Zaidi,Team Based,25,25,16-Jan-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+658,1956,NS - PWF - ERP Implementation,1320,Zahid Hussain - SE,Team Based,25,25,1-Apr-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+659,1651,NS - ReBag - Teambased,705,Azfar Ayub,,1,0,1-Jan-26,30-Jun-26,Internal,Allocated,14,Syed Abdul Nasir
+660,1651,NS - ReBag - Teambased,1714,Mairaj Ali,Hourly,13,13,1-Jan-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+661,1651,NS - ReBag - Teambased,2110,Muhammad Hammad Qureshi,Hourly,25,25,22-Apr-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+662,1651,NS - ReBag - Teambased,1216,Muhammad Ubaid Raza,Hourly,13,13,1-Jan-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+663,2210,NS - Roxburghe - ERP Implementation,211,S M Zeeshan Hussain,Hourly,15,15,11-May-26,6-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+664,2201,NS - Rugged Suppressors - ERP Implementation,464,Kamil Mushtaq,Hourly,5,5,23-May-26,3-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+665,2201,NS - Rugged Suppressors - ERP Implementation,2241,Priya Parpyani,Hourly,50,25,1-Jun-26,3-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+666,1036,NS - Signifyd Integration - Team based,1855,Mohammad Ahmad,Team Based,25,25,31-May-26,30-Sep-26,Billed,Allocated,14,Syed Abdul Nasir
+667,2130,NS - SKirby Company - ERP Implementation,945,Adeel Shakeel,Team Based,50,50,7-Apr-26,29-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+668,2130,NS - SKirby Company - ERP Implementation,1717,Ali Javed,Team Based,50,50,7-Apr-26,29-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+669,2130,NS - SKirby Company - ERP Implementation,925,Junaid Altaf,Team Based,25,25,7-Apr-26,29-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+670,2130,NS - SKirby Company - ERP Implementation,1018,Muhammad Danish Khanani,Team Based,38,38,1-Jun-26,29-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+671,1965,NS - Spotlight - Connectors and Integration,2185,Muhammad Sarim Hassan,Hourly,25,25,13-Apr-26,4-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+672,1803,NS - SpotLight Oral Care,705,Azfar Ayub,,1,0,1-Jan-26,30-Jun-26,Internal,Allocated,14,Syed Abdul Nasir
+673,1803,NS - SpotLight Oral Care,1281,Waqar Fazil,Hourly,25,25,6-Apr-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+674,1782,NS - Sprinturf - Advanced Customer Support,889,Khalid Anwar,Team Based,25,25,1-Jun-26,31-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+675,1782,NS - Sprinturf - Advanced Customer Support,211,S M Zeeshan Hussain,,1,0,1-Apr-26,31-Jul-26,Internal,Allocated,14,Syed Abdul Nasir
+676,1782,NS - Sprinturf - Advanced Customer Support,950,Tazeen Fatima,Hourly,75,75,1-Jun-26,20-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+677,2031,NS - Srixon - ERP Implementation,1645,Abdul Rehman,Team Based,50,50,16-Mar-26,19-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+678,2031,NS - Srixon - ERP Implementation,2208,Ali Muhammad Murshid,Team Based,100,100,27-Mar-26,19-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+679,2031,NS - Srixon - ERP Implementation,2152,Ammar Athar,Team Based,100,100,27-Mar-26,19-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+680,2031,NS - Srixon - ERP Implementation,1207,Atif Ashfaq,Team Based,25,25,16-Mar-26,26-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+681,2031,NS - Srixon - ERP Implementation,1394,Khuzema Qasmi,Team Based,25,25,17-Mar-26,19-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+682,2031,NS - Srixon - ERP Implementation,1918,Moazzam Iqbal Gill,Team Based,25,25,16-Mar-26,19-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+683,2031,NS - Srixon - ERP Implementation,906,Muhammad Tahir Ansari,Team Based,25,25,16-Mar-26,19-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+684,2031,NS - Srixon - ERP Implementation,211,S M Zeeshan Hussain,Hourly,25,25,20-Apr-26,19-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+685,2031,NS - Srixon - ERP Implementation,1032,Waqas Farooq,Team Based,37,37,7-Apr-26,19-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+686,2035,NS - Support CRs,2206,Bisma Abid,Hourly,38,38,1-Jun-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+687,2035,NS - Support CRs,2099,Hamza Ehtesham Farooq,Hourly,25,25,23-May-26,6-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+688,2328,NS - Team - Leaves,513,Adeel Ahmed,Team Based,100,100,20-May-26,12-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+689,2328,NS - Team - Leaves,632,Daniyal Ibrahim,Hourly,100,100,13-May-26,8-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+690,2328,NS - Team - Leaves,1641,Muhammad Owais,Team Based,100,100,1-Jun-26,7-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+691,2376,NS - Team BlueSky - Customization,1320,Zahid Hussain - SE,Team Based,75,75,2-Mar-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+692,1317,NS - Team Litzen - ERP Implementation & Customization,2203,Muhammad Taha Siddiqui,Team Based,50,50,10-Feb-26,3-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+693,1317,NS - Team Litzen - ERP Implementation & Customization,1049,Rushan Riaz,Team Based,50,50,1-Apr-26,3-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+694,1317,NS - Team Litzen - ERP Implementation & Customization,1676,Umer Imran,Team Based,50,50,1-Apr-26,3-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+695,1971,NS - The Frankie Shop - Implementation / Customization,1216,Muhammad Ubaid Raza,Team Based,12.5,12,1-May-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+696,1971,NS - The Frankie Shop - Implementation / Customization,211,S M Zeeshan Hussain,,1,0,2-Feb-26,30-Jun-26,Internal,Allocated,14,Syed Abdul Nasir
+697,1971,NS - The Frankie Shop - Implementation / Customization,1489,Talha Ahmad Siddiqui,Team Based,12.5,12,1-May-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+698,762,NS - Training,2261,Khizar Anees,,100,0,1-Jun-26,13-Jun-26,Training,Allocated,14,Syed Abdul Nasir
+699,2295,NS - Tropic SkinCare - Teambased Support,1045,Aagha Abdul Waheed,Team Based,50,50,2-Feb-26,25-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+700,2295,NS - Tropic SkinCare - Teambased Support,925,Junaid Altaf,Team Based,25,25,6-May-26,3-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+701,2295,NS - Tropic SkinCare - Teambased Support,1692,Muhammad Faaiz Qureshi,Team Based,75,75,11-May-26,3-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+702,2295,NS - Tropic SkinCare - Teambased Support,500,Syed Muhammad Usman Hussain,Team Based,25,25,11-May-26,3-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+703,363,NS - Unified Connector,657,Amin Ur Rehman,Team Based,50,50,5-Feb-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+704,363,NS - Unified Connector,795,Muhammad Faizan Khan,Hourly,25,25,19-May-26,30-Sep-26,Billed,Allocated,14,Syed Abdul Nasir
+705,363,NS - Unified Connector,968,Muhammad Kazim Hussain,Team Based,25,25,2-Feb-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+706,363,NS - Unified Connector,1701,Talha bin Khalid,Hourly,25,25,25-May-26,6-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+707,363,NS - Unified Connector,950,Tazeen Fatima,,25,0,1-Jun-26,31-Aug-26,Internal,Allocated,14,Syed Abdul Nasir
+708,363,NS - Unified Connector,1566,Zaid Aslam,Team Based,38,38,2-Mar-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+709,2496,NS - Union Roasted - Cropster,965,Muaz Mustafa,Hourly,12,12,9-Mar-26,13-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+710,2496,NS - Union Roasted - Cropster,1701,Talha bin Khalid,Hourly,25,25,16-Mar-26,13-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+711,2280,NS - United California Glass and Doors - Mulesoft SF Integration,889,Khalid Anwar,Hourly,75,75,18-May-26,12-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+712,2517,NS - Versare Solutions - BigCommerce Connector,2206,Bisma Abid,Hourly,12,12,11-May-26,15-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+714,2517,NS - Versare Solutions - BigCommerce Connector,795,Muhammad Faizan Khan,Hourly,25,25,1-Jun-26,6-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+715,2572,NS - Views - Propertese,965,Muaz Mustafa,Hourly,25,25,12-May-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+716,2572,NS - Views - Propertese,1351,Shawais Ismail,Hourly,50,50,1-Jul-26,2-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+717,2572,NS - Views - Propertese,1566,Zaid Aslam,Hourly,13,13,12-May-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+718,2509,NS - WS Display - Shopify Connector,714,Imtiaz Ahmed Shaikh,Hourly,25,25,4-May-26,20-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+719,2509,NS - WS Display - Shopify Connector,1891,Muhammad Nasiruddin Mahmood,Hourly,25,25,11-May-26,20-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+720,2509,NS - WS Display - Shopify Connector,454,Umair Ali,Hourly,15,15,5-Jan-26,20-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+721,2400,NS- Protiviti - Sesame - Teambased support,2152,Ammar Athar,Hourly,50,50,1-May-26,31-Jul-26,Billed,Allocated,14,Syed Abdul Nasir
+722,2400,NS- Protiviti - Sesame - Teambased support,705,Azfar Ayub,,1,0,1-Jan-26,30-Jun-26,Internal,Allocated,14,Syed Abdul Nasir
+723,2400,NS- Protiviti - Sesame - Teambased support,1494,Muhammad Saddiqain Ali Shah,Hourly,25,25,23-Feb-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+724,2400,NS- Protiviti - Sesame - Teambased support,1913,Saoud Ahmed Khan,Hourly,25,25,1-Jan-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+725,1295,NS Skydio - Dev Team Based,699,Mohammad,Team Based,100,100,1-Jan-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+726,1295,NS Skydio - Dev Team Based,1018,Muhammad Danish Khanani,Team Based,25,25,12-May-26,30-Jun-26,Billed,Allocated,14,Syed Abdul Nasir
+736,2533,Piedmontese NetSuite Enhancement & Customization,980,Hani Mamdani,Hourly,15,15,23-Feb-26,25-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+737,2533,Piedmontese NetSuite Enhancement & Customization,1341,Lai-Yi Cheung,Hourly,25,25,23-Feb-26,25-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
+738,2533,Piedmontese NetSuite Enhancement & Customization,493,Navaid Ahmed,Hourly,25,25,23-Feb-26,25-Aug-26,Billed,Allocated,14,Syed Abdul Nasir
