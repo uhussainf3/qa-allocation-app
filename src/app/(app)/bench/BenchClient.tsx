@@ -155,7 +155,7 @@ export function BenchClient({ bench, bench30, allUsers, divisions }: Props) {
     return filtered
       .map((u) => ({ ...u, onBenchPct: bench30[u.id] ?? 0 }))
       .sort((a, b) => b.onBenchPct - a.onBenchPct);
-  }, [allUsers, bench30, divisionFilter, pmDivisionId, roleFilter]);
+  }, [allUsers, bench30, divisionFilter, pmFilter, roleFilter]);
 
   // KPIs (today)
   const fullyFree      = visibleBench.filter((u) => u.onBenchPct === 100).length;
