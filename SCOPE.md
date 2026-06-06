@@ -84,6 +84,11 @@ Claude reads this at the start of every session and updates it as features are c
 | 23 | isOnshore flag on User | ✅ Done | Schema: isOnshore Boolean @default(false); Team page edit modal checkbox with description; bench page excludes onshore users entirely; API PATCH supports field |
 | 24 | PM filter — managerId relationship | ✅ Done | Schema: User.managerId FK to self; weekly import populates managerId from Director ID column (most-frequent director per employee); employees import sets managerId from dominantDirectorId; all 3 PM filters now use managerId directly instead of division-based lookup |
 | 25 | Prisma client regeneration note | ✅ Done | After schema changes (log, isOnshore, managerId), must stop dev server → npx prisma generate → restart to avoid PrismaClientValidationError on new fields |
+| 26 | Import algorithm — Full Replace scoped to csvPairs | ✅ Done | Delete batch allocs for (userId,projectId) pairs in CSV + date range, then insert fresh; 13-scenario coverage |
+| 27 | importUtils.ts — pure import utility functions | ✅ Done | parseRMDate, computeCsvRange, buildCsvPairKey, detectIntraCSVOverlaps, detectDuplicateRows, buildPercentChangeNote, buildOverlapNote |
+| 28 | Stale Allocations screen | ✅ Done | Two-section UI: Section A (within CSV range) + Section B (beyond CSV maxEnd); DELETE per row; ADMIN+DO only |
+| 29 | Overlap Alerts screen | ✅ Done | Tab in Import page showing current-batch allocations flagged with overlap notes (S-6) |
+| 30 | Import History — enriched skipped rows | ✅ Done | S-7/S-8/S-12 skipped rows stored in batch log with reason, employeeId, projectId, dates |
 
 ---
 

@@ -8,7 +8,10 @@
     "start": "next start --port 3000",
     "studio": "prisma studio --port 5555",
     "postinstall": "prisma generate",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^1.6.0",
@@ -20,16 +23,17 @@
     "prisma": "^5.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "xlsx": "^0.18.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/ui": "^4.1.8",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "sql.js": "^1.14.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.8"
   }
 }

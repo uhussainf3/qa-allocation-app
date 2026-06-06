@@ -1387,6 +1387,269 @@ function ImportHistory() {
   );
 }
 
+// ─── Stale Allocations ────────────────────────────────────────────────────────
+
+type StaleAllocation = {
+  id:             string;
+  employeeName:   string;
+  projectName:    string;
+  startDate:      string;
+  endDate:        string;
+  allocationPct:  number;
+  notes:          string | null;
+  lastBatchLabel: string;
+  lastUploadedAt: string | null;
+};
+
+type StaleData = {
+  currentBatch: { id: string; label: string; csvRange: { minStart: string; maxEnd: string } | null } | null;
+  withinRange:  StaleAllocation[];
+  beyondRange:  StaleAllocation[];
+};
+
+function StaleAllocations() {
+  const [data,    setData]    = useState<StaleData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res  = await fetch("/api/import/allocations/stale");
+      const json = await res.json();
+      setData(json);
+    } catch { /* ignore */ }
+    finally  { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this allocation? This cannot be undone.")) return;
+    setDeleting(id);
+    try {
+      await fetch("/api/import/allocations/stale", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      await load();
+    } finally { setDeleting(null); }
+  }
+
+  function fmtDate(iso: string) {
+    return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  function StaleTable({ rows, section }: { rows: StaleAllocation[]; section: "A" | "B" }) {
+    if (rows.length === 0)
+      return <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "10px 0" }}>None</div>;
+
+    return (
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              {["Employee", "Project", "Start", "End", "%", "Last import", "Notes", "Action"].map((h) => (
+                <th key={h} style={{ textAlign: "left", padding: "5px 8px", color: "var(--text-muted)", fontWeight: 500, whiteSpace: "nowrap" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} style={{ borderBottom: "1px solid var(--border-faint)" }}>
+                <td style={{ padding: "6px 8px", fontWeight: 500 }}>{r.employeeName}</td>
+                <td style={{ padding: "6px 8px" }}>{r.projectName}</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--mono)" }}>{fmtDate(r.startDate)}</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--mono)" }}>{fmtDate(r.endDate)}</td>
+                <td style={{ padding: "6px 8px", fontFamily: "var(--mono)" }}>{r.allocationPct}%</td>
+                <td style={{ padding: "6px 8px", color: "var(--text-muted)", fontSize: 11 }}>{r.lastBatchLabel}</td>
+                <td style={{ padding: "6px 8px", color: "var(--text-muted)", fontSize: 11, maxWidth: 200 }}>{r.notes ?? "—"}</td>
+                <td style={{ padding: "6px 8px" }}>
+                  <button
+                    className="btn"
+                    style={{ fontSize: 11, padding: "3px 10px", color: "var(--bad)", borderColor: "var(--bad)" }}
+                    onClick={() => handleDelete(r.id)}
+                    disabled={deleting === r.id}
+                  >
+                    {deleting === r.id ? "…" : "Delete"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  if (loading) return <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Loading…</div>;
+
+  if (!data?.currentBatch) return (
+    <div className="card" style={{ maxWidth: 560 }}>
+      <div style={{ fontSize: 13, color: "var(--text-muted)" }}>No import batch found. Run a Weekly Upload first.</div>
+    </div>
+  );
+
+  const totalStale = (data.withinRange?.length ?? 0) + (data.beyondRange?.length ?? 0);
+
+  return (
+    <div style={{ maxWidth: 1000 }}>
+      {/* Current batch context */}
+      <div className="card" style={{ marginBottom: 16, padding: "10px 16px" }}>
+        <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+          Current batch: <strong>{data.currentBatch.label}</strong>
+          {data.currentBatch.csvRange && (
+            <> · CSV range: <span style={{ fontFamily: "var(--mono)" }}>
+              {fmtDate(data.currentBatch.csvRange.minStart)} → {fmtDate(data.currentBatch.csvRange.maxEnd)}
+            </span></>
+          )}
+          {" · "}<strong style={{ color: totalStale > 0 ? "var(--bad)" : "var(--ok)" }}>{totalStale} stale allocation{totalStale !== 1 ? "s" : ""}</strong>
+        </div>
+      </div>
+
+      {totalStale === 0 && (
+        <div className="card" style={{ maxWidth: 560 }}>
+          <div style={{ fontSize: 13, color: "var(--ok)" }}>✓ No stale allocations. Everything in the DB matches the latest import.</div>
+        </div>
+      )}
+
+      {/* Section A — Likely Removed */}
+      {(data.withinRange?.length ?? 0) > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>
+            Section A — Likely Removed ({data.withinRange.length})
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
+            These allocations fall within the current CSV&apos;s date range but were not in the import.
+            They were most likely removed from the RM Tool. Review and delete if correct.
+          </div>
+          <StaleTable rows={data.withinRange} section="A" />
+        </div>
+      )}
+
+      {/* Section B — Outside CSV Range */}
+      {(data.beyondRange?.length ?? 0) > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>
+            Section B — Outside Import Range — Verify ({data.beyondRange.length})
+          </div>
+          <div
+            style={{
+              fontSize: 12, background: "#fff8e1", border: "1px solid #f0b429",
+              borderRadius: 6, padding: "8px 12px", marginBottom: 12,
+            }}
+          >
+            ⚠ These allocations start <strong>after the CSV&apos;s end date</strong> ({data.currentBatch.csvRange ? fmtDate(data.currentBatch.csvRange.maxEnd) : "unknown"}).
+            The RM Tool may not have exported data that far. They may still be valid — confirm before deleting.
+          </div>
+          <StaleTable rows={data.beyondRange} section="B" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Overlap Alerts ───────────────────────────────────────────────────────────
+
+type OverlapAllocation = {
+  id:            string;
+  employeeName:  string;
+  projectName:   string;
+  startDate:     string;
+  endDate:       string;
+  allocationPct: number;
+  notes:         string | null;
+};
+
+function OverlapAlerts() {
+  const [items,   setItems]   = useState<OverlapAllocation[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Fetch current batch allocations that have an overlap note
+    fetch("/api/import/allocations/batches")
+      .then((r) => r.json())
+      .then(async (batches: { id: string; isCurrent: boolean }[]) => {
+        const current = batches.find((b) => b.isCurrent);
+        if (!current) { setLoading(false); return; }
+
+        // Fetch allocations for current batch that have overlap notes
+        const res  = await fetch(`/api/allocations/view?batchId=${current.id}`);
+        const data = await res.json();
+        const flagged = (Array.isArray(data) ? data : (data.allocations ?? []))
+          .filter((a: { notes?: string }) => a.notes?.includes("Overlap detected"));
+        setItems(flagged.map((a: {
+          id: string;
+          user?: { name?: string };
+          project?: { name?: string };
+          startDate: string;
+          endDate: string;
+          hoursPerDay: number;
+          notes?: string;
+        }) => ({
+          id:            a.id,
+          employeeName:  a.user?.name    ?? "Unknown",
+          projectName:   a.project?.name ?? "Unknown",
+          startDate:     a.startDate,
+          endDate:       a.endDate,
+          allocationPct: Math.round((a.hoursPerDay / 8) * 100),
+          notes:         a.notes ?? null,
+        })));
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  function fmtDate(iso: string) {
+    return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  if (loading) return <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Loading…</div>;
+
+  if (items.length === 0) return (
+    <div className="card" style={{ maxWidth: 560 }}>
+      <div style={{ fontSize: 13, color: "var(--ok)" }}>✓ No overlap conflicts in the current import.</div>
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth: 1000 }}>
+      <div className="card">
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>Overlap Alerts — {items.length} flagged allocation{items.length !== 1 ? "s" : ""}</div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14 }}>
+          These allocations were imported but their date ranges overlap with another row for the same employee and project
+          in the same import file. Both were inserted — review and delete the incorrect one from the{" "}
+          <strong>Manage Allocations</strong> page.
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                {["Employee", "Project", "Start", "End", "%", "Note"].map((h) => (
+                  <th key={h} style={{ textAlign: "left", padding: "5px 8px", color: "var(--text-muted)", fontWeight: 500, whiteSpace: "nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((r) => (
+                <tr key={r.id} style={{ borderBottom: "1px solid var(--border-faint)", background: "#fff8e1" }}>
+                  <td style={{ padding: "6px 8px", fontWeight: 500 }}>{r.employeeName}</td>
+                  <td style={{ padding: "6px 8px" }}>{r.projectName}</td>
+                  <td style={{ padding: "6px 8px", fontFamily: "var(--mono)" }}>{fmtDate(r.startDate)}</td>
+                  <td style={{ padding: "6px 8px", fontFamily: "var(--mono)" }}>{fmtDate(r.endDate)}</td>
+                  <td style={{ padding: "6px 8px", fontFamily: "var(--mono)" }}>{r.allocationPct}%</td>
+                  <td style={{ padding: "6px 8px", color: "var(--text-secondary)", fontSize: 11 }}>{r.notes}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Top-level component ─────────────────────────────────────────────────────
 
 export function ImportClient() {
@@ -1394,14 +1657,16 @@ export function ImportClient() {
   const isAdmin         = session?.user?.role === "ADMIN";
   const isDivOwner      = session?.user?.role === "DIVISION_OWNER";
   const canWeeklyUpload = isAdmin || isDivOwner;
-  const [tab, setTab]   = useState<"weekly" | "history" | "projects" | "employees" | "rm" | "legacy">(
+  const [tab, setTab]   = useState<"weekly" | "history" | "stale" | "overlaps" | "projects" | "employees" | "rm" | "legacy">(
     canWeeklyUpload ? "weekly" : "legacy"
   );
 
-  type Tab = "weekly" | "history" | "projects" | "employees" | "rm" | "legacy";
+  type Tab = "weekly" | "history" | "stale" | "overlaps" | "projects" | "employees" | "rm" | "legacy";
   const tabs: { key: Tab; label: string; show: boolean }[] = [
     { key: "weekly",    label: "Weekly Upload",         show: canWeeklyUpload },
     { key: "history",   label: "Import History",        show: canWeeklyUpload },
+    { key: "stale",     label: "Stale Allocations",     show: canWeeklyUpload },
+    { key: "overlaps",  label: "Overlap Alerts",        show: canWeeklyUpload },
     { key: "projects",  label: "Projects",              show: isAdmin },
     { key: "employees", label: "Employees",             show: isAdmin },
     { key: "rm",        label: "Full RM Migration",     show: isAdmin },
@@ -1438,6 +1703,8 @@ export function ImportClient() {
 
       {tab === "weekly"    && <WeeklyUpload />}
       {tab === "history"   && <ImportHistory />}
+      {tab === "stale"     && <StaleAllocations />}
+      {tab === "overlaps"  && <OverlapAlerts />}
       {tab === "projects"  && <ProjectsImport />}
       {tab === "employees" && <EmployeesImport />}
       {tab === "rm"        && <RMImport />}
