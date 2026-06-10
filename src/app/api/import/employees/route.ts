@@ -2,145 +2,119 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ok, err, unauthorized } from "@/lib/apiResponse";
 import { revalidateTag } from "next/cache";
+import {
+  planEmployeeImport,
+  type EmpImportRow,
+  type DirectorInfo,
+  type ExistingUser,
+} from "@/lib/employeeImportUtils";
 
-// Derive app role from the RM tool's coarse role column.
-// jobTitle is taken directly from the Position column — stored as-is.
-function mapRole(rmRole: string): { role: string } {
-  switch (rmRole.trim().toLowerCase()) {
-    case "pm": return { role: "PROJECT_MANAGER" };
-    default:   return { role: "MEMBER" };
-  }
-}
-
-// Map RM Role column → readable department label stored on User.department
-function mapDepartment(rmRole: string): string | null {
-  switch (rmRole.trim().toLowerCase()) {
-    case "dev":
-    case "ui":            return "Developer";
-    case "qa":            return "QA Engineer";
-    case "pm":            return "Project Manager";
-    case "fc":            return "Functional Consultant";
-    case "product manager": return "Product Manager";
-    default:              return null;
-  }
-}
+const UPDATE_CHUNK_SIZE = 25;
 
 // POST /api/import/employees
 // Body: {
-//   rows: Array<{ fomsId, name, email, rmRole, dominantDirectorId? }>
+//   rows: Array<{ fomsId, name, email, rmRole, position?, dominantDirectorId? }>
 // }
 // dominantDirectorId: the directorId from RM - Data.csv that appears most for this employee.
-// Skip rows where fomsId already exists as externalId (directors from Step 2).
+//
+// All lookups are batch-fetched up front (a handful of queries regardless of
+// row count) and the create/update plan is computed in memory via
+// planEmployeeImport — avoids the N+1 query pattern that timed out on Vercel
+// for ~700-row imports.
 export async function POST(req: Request) {
   const session = await auth();
   if (!session) return unauthorized();
   if (session.user.role !== "ADMIN") return err("Forbidden", 403);
 
   const body = await req.json();
-  const { rows } = body as {
-    rows: Array<{
-      fomsId:              string;
-      name:                string;
-      email:               string;
-      rmRole:              string;
-      position?:           string;
-      dominantDirectorId?: string;
-    }>;
-  };
+  const { rows } = body as { rows: EmpImportRow[] };
 
   if (!Array.isArray(rows) || rows.length === 0) return err("rows must be a non-empty array");
 
-  const created: string[] = [];
-  const skipped: string[] = [];
-  const errors:  { fomsId: string; message: string }[] = [];
+  const fomsIds = rows.map((r) => r.fomsId);
+  const emails = rows.map((r) => r.email);
+  const directorExtIds = [...new Set(rows.map((r) => r.dominantDirectorId).filter((d): d is string => !!d))];
+  const positions = [...new Set(rows.map((r) => r.position).filter((p): p is string => !!p))];
 
-  for (const row of rows) {
-    const { fomsId, name, email, rmRole, position = "", dominantDirectorId } = row;
+  const [existingByExtId, existingByEmail, directors, existingJobTitles] = await Promise.all([
+    prisma.user.findMany({
+      where: { externalId: { in: fomsIds } },
+      select: { id: true, role: true, divisionId: true, managerId: true, externalId: true },
+    }),
+    prisma.user.findMany({
+      where: { email: { in: emails } },
+      select: { id: true, role: true, divisionId: true, managerId: true, externalId: true, email: true },
+    }),
+    prisma.user.findMany({
+      where: { externalId: { in: directorExtIds } },
+      select: { id: true, externalId: true },
+    }),
+    prisma.jobTitle.findMany({
+      where: { name: { in: positions } },
+      select: { name: true },
+    }),
+  ]);
 
+  const divisions = directors.length
+    ? await prisma.division.findMany({
+        where: { ownerId: { in: directors.map((d) => d.id) } },
+        select: { id: true, ownerId: true },
+      })
+    : [];
+
+  const divisionByOwnerId = new Map(divisions.map((d) => [d.ownerId as string, d.id]));
+  const directorsByExternalId = new Map<string, DirectorInfo>(
+    directors.map((d) => [d.externalId as string, { id: d.id, divisionId: divisionByOwnerId.get(d.id) ?? null }])
+  );
+  const usersByExternalId = new Map<string, ExistingUser>(
+    existingByExtId.map((u) => [u.externalId as string, u])
+  );
+  const usersByEmail = new Map<string, ExistingUser>(
+    existingByEmail.map((u) => [u.email as string, u])
+  );
+  const existingJobTitleSet = new Set(existingJobTitles.map((j) => j.name));
+
+  const plan = planEmployeeImport(rows, {
+    directorsByExternalId,
+    usersByExternalId,
+    usersByEmail,
+    existingJobTitles: existingJobTitleSet,
+  });
+
+  const errors: { fomsId: string; message: string }[] = [];
+
+  if (plan.jobTitlesToCreate.length > 0) {
     try {
-      const { role }   = mapRole(rmRole);
-      const jobTitle   = position || null;
-      const department = mapDepartment(rmRole);
-
-      // Auto-create the JobTitle record if it doesn't exist yet
-      if (jobTitle) {
-        await prisma.jobTitle.upsert({
-          where:  { name: jobTitle },
-          create: { name: jobTitle },
-          update: {},
-        });
-      }
-
-      // Resolve division and manager from dominant director
-      let divisionId: string | null = null;
-      let managerId:  string | null = null;
-      if (dominantDirectorId) {
-        const director = await prisma.user.findFirst({ where: { externalId: dominantDirectorId } });
-        if (director) {
-          const div = await prisma.division.findFirst({ where: { ownerId: director.id } });
-          divisionId = div?.id ?? null;
-          managerId  = director.id;
-        }
-      }
-
-      // Check if already imported as a director (externalId match)
-      const existingByExtId = await prisma.user.findFirst({ where: { externalId: fomsId } });
-      if (existingByExtId) {
-        await prisma.user.update({
-          where: { id: existingByExtId.id },
-          data: {
-            ...(jobTitle    ? { jobTitle }   : {}),
-            ...(department  ? { department } : {}),
-            // Backfill divisionId if currently missing and we now know it
-            ...(divisionId && !existingByExtId.divisionId ? { divisionId } : {}),
-            ...(managerId  && !existingByExtId.managerId  ? { managerId }  : {}),
-            // Promote role if RM says PM but user was auto-created as MEMBER
-            ...(role !== "MEMBER" && existingByExtId.role === "MEMBER" ? { role } : {}),
-          },
-        });
-        skipped.push(fomsId);
-        continue;
-      }
-
-      // Upsert by email (in case user already registered via Google OAuth)
-      const existing = await prisma.user.findFirst({ where: { email } });
-      if (existing) {
-        await prisma.user.update({
-          where: { id: existing.id },
-          data: {
-            externalId: fomsId,
-            role:       existing.role === "ADMIN" ? existing.role : role,
-            ...(jobTitle    ? { jobTitle }   : {}),
-            ...(department  ? { department } : {}),
-            divisionId: existing.divisionId ?? divisionId,
-            managerId:  existing.managerId  ?? managerId,
-          },
-        });
-        skipped.push(fomsId);
-      } else {
-        await prisma.user.create({
-          data: {
-            name,
-            email,
-            role,
-            jobTitle,
-            department,
-            externalId: fomsId,
-            divisionId,
-            managerId,
-            isActive:   true,
-            capacity:   40,
-          },
-        });
-        created.push(name);
-      }
+      await prisma.jobTitle.createMany({
+        data: plan.jobTitlesToCreate.map((name) => ({ name })),
+        skipDuplicates: true,
+      });
     } catch (e: unknown) {
-      errors.push({ fomsId, message: String(e) });
+      errors.push({ fomsId: "(job titles)", message: String(e) });
     }
+  }
+
+  if (plan.usersToCreate.length > 0) {
+    try {
+      await prisma.user.createMany({ data: plan.usersToCreate, skipDuplicates: true });
+    } catch (e: unknown) {
+      errors.push({ fomsId: "(new employees)", message: String(e) });
+    }
+  }
+
+  for (let i = 0; i < plan.usersToUpdate.length; i += UPDATE_CHUNK_SIZE) {
+    const chunk = plan.usersToUpdate.slice(i, i + UPDATE_CHUNK_SIZE);
+    await Promise.all(
+      chunk.map(({ id, fomsId, data }) =>
+        prisma.user.update({ where: { id }, data }).catch((e: unknown) => {
+          errors.push({ fomsId, message: String(e) });
+        })
+      )
+    );
   }
 
   revalidateTag("users",      "max" as never);
   revalidateTag("job-titles", "max" as never);
 
-  return ok({ created: created.length, skipped: skipped.length, errors });
+  return ok({ created: plan.created.length, skipped: plan.skipped.length, errors });
 }
