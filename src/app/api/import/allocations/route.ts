@@ -2,6 +2,7 @@ import { auth }          from "@/lib/auth";
 import { prisma }        from "@/lib/prisma";
 import { ok, err, unauthorized } from "@/lib/apiResponse";
 import { revalidateTag } from "next/cache";
+import { streamImport }  from "@/lib/importStream";
 import {
   parseRMDate,
   computeCsvRange,
@@ -46,6 +47,19 @@ type SkippedRow = {
   endDate:     string;
   reason:      string;
 };
+
+type AllocationInsertData = {
+  userId:      string;
+  projectId:   string;
+  startDate:   Date;
+  endDate:     Date;
+  hoursPerDay: number;
+  batchId:     string;
+  notes:       string | null;
+};
+
+const INSERT_CHUNK_SIZE = 200;
+const UPDATE_CHUNK_SIZE = 25;
 
 // ─── POST /api/import/allocations ────────────────────────────────────────────
 
@@ -204,37 +218,43 @@ export async function POST(req: Request) {
 
   // ── REAL IMPORT ────────────────────────────────────────────────────────────
 
-  // Step 3: Auto-create missing employees
+  // Step 3: Auto-create missing employees (batched — avoids 1-2 queries/missing employee)
   const employeesAutoCreated: { externalId: string; name: string }[] = [];
-  for (const [externalId, { name, directorId }] of missingEmployees) {
-    try {
+  if (missingEmployees.size > 0) {
+    const toCreate = [...missingEmployees.entries()].map(([externalId, { name, directorId }]) => {
       const directorUserId = userMap.get(directorId);
       const divisionId     = directorUserId ? (ownerToDivision.get(directorUserId) ?? null) : null;
-      const user = await prisma.user.create({
-        data: { name, email: `emp.${externalId}@import.local`, externalId, role: "MEMBER", capacity: 40, divisionId, isActive: true },
-      });
-      userMap.set(externalId, user.id);
-      employeesAutoCreated.push({ externalId, name });
-    } catch {
-      const existing = await prisma.user.findUnique({ where: { externalId }, select: { id: true } });
-      if (existing) userMap.set(externalId, existing.id);
+      return { name, email: `emp.${externalId}@import.local`, externalId, role: "MEMBER", capacity: 40, divisionId, isActive: true };
+    });
+    await prisma.user.createMany({ data: toCreate, skipDuplicates: true });
+    const createdUsers = await prisma.user.findMany({
+      where:  { externalId: { in: [...missingEmployees.keys()] } },
+      select: { id: true, externalId: true, name: true },
+    });
+    for (const u of createdUsers) {
+      if (!u.externalId) continue;
+      userMap.set(u.externalId, u.id);
+      employeesAutoCreated.push({ externalId: u.externalId, name: u.name ?? "" });
     }
   }
 
-  // Step 4: Auto-create missing projects
+  // Step 4: Auto-create missing projects (batched — avoids 1-2 queries/missing project)
   const projectsAutoCreated: { externalId: string; name: string }[] = [];
-  for (const [externalId, { name, directorId }] of missingProjects) {
-    try {
+  if (missingProjects.size > 0) {
+    const toCreate = [...missingProjects.entries()].map(([externalId, { name, directorId }]) => {
       const directorUserId = userMap.get(directorId);
       const divisionId     = directorUserId ? (ownerToDivision.get(directorUserId) ?? null) : null;
-      const project = await prisma.project.create({
-        data: { name, code: externalId, externalId, status: "ACTIVE", color: "#6366f1", divisionId },
-      });
-      projectMap.set(externalId, project.id);
-      projectsAutoCreated.push({ externalId, name });
-    } catch {
-      const existing = await prisma.project.findUnique({ where: { externalId }, select: { id: true } });
-      if (existing) projectMap.set(externalId, existing.id);
+      return { name, code: externalId, externalId, status: "ACTIVE", color: "#6366f1", divisionId };
+    });
+    await prisma.project.createMany({ data: toCreate, skipDuplicates: true });
+    const createdProjects = await prisma.project.findMany({
+      where:  { externalId: { in: [...missingProjects.keys()] } },
+      select: { id: true, externalId: true, name: true },
+    });
+    for (const p of createdProjects) {
+      if (!p.externalId) continue;
+      projectMap.set(p.externalId, p.id);
+      projectsAutoCreated.push({ externalId: p.externalId, name: p.name });
     }
   }
 
@@ -329,9 +349,7 @@ export async function POST(req: Request) {
   });
 
   // Filter to csvPairs scope and build % change detection map
-  const toDelete:         string[]                     = [];
-  const oldHoursMap = new Map<string, number>(); // "userId::projectId::startDate" → old hoursPerDay
-  // Actually we need to map by pair for % change detection
+  const toDelete:   string[]              = [];
   const pairOldHours = new Map<string, number>(); // "userId::projectId" → old hoursPerDay (last seen)
 
   for (const existing of existingInRange) {
@@ -347,11 +365,9 @@ export async function POST(req: Request) {
     deletedCount = result.count;
   }
 
-  // Step 12: Insert rows
-  let created = 0;
+  // Step 12 prep: detect manual allocation key conflicts (S-12) before inserting
   const importDate = new Date();
 
-  // Step 12: Also detect manual allocation key conflicts (S-12) before inserting
   const manualConflicts = await prisma.allocation.findMany({
     where: {
       batchId:   null,
@@ -364,9 +380,12 @@ export async function POST(req: Request) {
     manualConflicts.map((m) => `${m.userId}::${m.projectId}::${m.startDate.toISOString()}`)
   );
 
+  // Build the list of allocations to insert (resolving notes), skipping S-12 conflicts
+  const toInsert: { row: ValidatedRow; data: AllocationInsertData }[] = [];
+
   for (const row of insertRows) {
-    const pairKey      = buildCsvPairKey(row.userId, row.projectId);
-    const manualKey    = `${row.userId}::${row.projectId}::${row.start.toISOString()}`;
+    const pairKey   = buildCsvPairKey(row.userId, row.projectId);
+    const manualKey = `${row.userId}::${row.projectId}::${row.start.toISOString()}`;
     let   notes: string | undefined;
 
     // S-12: manual allocation holds same unique key
@@ -395,56 +414,21 @@ export async function POST(req: Request) {
       notes = notes ? `${notes} | ${overlapNote}` : overlapNote;
     }
 
-    try {
-      await prisma.allocation.create({
-        data: {
-          userId:     row.userId,
-          projectId:  row.projectId,
-          startDate:  row.start,
-          endDate:    row.end,
-          hoursPerDay: row.hoursPerDay,
-          batchId:    batch.id,
-          notes:      notes ?? null,
-        },
-      });
-      created++;
-    } catch (e) {
-      skippedRows.push({
-        row:        row.rowIndex,
-        employeeId: row.employeeId,
-        projectId:  row.extProjectId,
-        startDate:  row.start.toISOString(),
-        endDate:    row.end.toISOString(),
-        reason:     `Insert failed: ${String(e)}`,
-      });
-    }
-  }
-
-  // Step 13: Store enriched log on the batch record
-  try {
-    const log = {
-      uploadedBy:           session.user.name ?? session.user.email ?? session.user.id,
-      uploadedAt:           importDate.toISOString(),
-      totalRows:            rows.length,
-      allocationsCreated:   created,
-      allocationsUpdated:   0,         // kept for UI backward compat
-      allocationsDeleted:   deletedCount,
-      employeesAutoCreated,
-      projectsAutoCreated,
-      overlapFlags:         overlapConflicts,
-      skippedRows,
-      errors:               skippedRows.map((s) => ({ row: s.row, message: s.reason })), // backward compat
-      csvRange: {
-        minStart: csvRange.minStart.toISOString(),
-        maxEnd:   csvRange.maxEnd.toISOString(),
+    toInsert.push({
+      row,
+      data: {
+        userId:      row.userId,
+        projectId:   row.projectId,
+        startDate:   row.start,
+        endDate:     row.end,
+        hoursPerDay: row.hoursPerDay,
+        batchId:     batch.id,
+        notes:       notes ?? null,
       },
-    };
-    await prisma.allocationBatch.update({ where: { id: batch.id }, data: { log } });
-  } catch {
-    // Log save failed — import still succeeds
+    });
   }
 
-  // Step 14: Update managerId from Director ID column
+  // Step 14 prep: managerId backfill from Director ID column (pure — uses userMap only)
   const managerVotes = new Map<string, Map<string, number>>();
   for (const row of rows) {
     if (!row.directorId || !row.employeeId) continue;
@@ -452,35 +436,108 @@ export async function POST(req: Request) {
     const votes = managerVotes.get(row.employeeId)!;
     votes.set(row.directorId, (votes.get(row.directorId) ?? 0) + 1);
   }
+  const managerUpdates: { userId: string; managerUserId: string }[] = [];
   for (const [employeeExtId, votes] of managerVotes) {
     const userId = userMap.get(employeeExtId);
     if (!userId) continue;
     const topDirectorExtId = [...votes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
     const managerUserId    = topDirectorExtId ? userMap.get(topDirectorExtId) : undefined;
     if (managerUserId && managerUserId !== userId) {
-      try { await prisma.user.update({ where: { id: userId }, data: { managerId: managerUserId } }); }
-      catch { /* non-critical */ }
+      managerUpdates.push({ userId, managerUserId });
     }
   }
 
-  revalidateTag("allocations", "max" as never);
-  revalidateTag("users",       "max" as never);
-  revalidateTag("projects",    "max" as never);
+  return streamImport(async (send) => {
+    const total = toInsert.length + managerUpdates.length;
+    let done = 0;
+    let created = 0;
 
-  return ok({
-    batchId:              batch.id,
-    label:                batch.label,
-    created,
-    updated:              0,           // backward compat
-    deleted:              deletedCount,
-    overlapsDetected:     overlapConflicts.length,
-    skippedRows,
-    employeesAutoCreated,
-    projectsAutoCreated,
-    errors:               skippedRows.map((s) => ({ row: s.row, message: s.reason })),
-    csvRange: {
-      minStart: csvRange.minStart.toISOString(),
-      maxEnd:   csvRange.maxEnd.toISOString(),
-    },
+    // Step 12: Insert rows in chunks via createMany; fall back to per-row
+    // inserts within a chunk only if the bulk insert itself fails, so a
+    // single bad row doesn't lose the rest of the chunk.
+    for (let i = 0; i < toInsert.length; i += INSERT_CHUNK_SIZE) {
+      const chunk = toInsert.slice(i, i + INSERT_CHUNK_SIZE);
+      try {
+        const result = await prisma.allocation.createMany({ data: chunk.map((c) => c.data) });
+        created += result.count;
+      } catch {
+        for (const c of chunk) {
+          try {
+            await prisma.allocation.create({ data: c.data });
+            created++;
+          } catch (e2) {
+            skippedRows.push({
+              row:        c.row.rowIndex,
+              employeeId: c.row.employeeId,
+              projectId:  c.row.extProjectId,
+              startDate:  c.row.start.toISOString(),
+              endDate:    c.row.end.toISOString(),
+              reason:     `Insert failed: ${String(e2)}`,
+            });
+          }
+        }
+      }
+      done += chunk.length;
+      send({ type: "progress", phase: "Allocations", done, total });
+    }
+
+    // Step 13: Store enriched log on the batch record
+    try {
+      const log = {
+        uploadedBy:           session.user.name ?? session.user.email ?? session.user.id,
+        uploadedAt:           importDate.toISOString(),
+        totalRows:            rows.length,
+        allocationsCreated:   created,
+        allocationsUpdated:   0,         // kept for UI backward compat
+        allocationsDeleted:   deletedCount,
+        employeesAutoCreated,
+        projectsAutoCreated,
+        overlapFlags:         overlapConflicts,
+        skippedRows,
+        errors:               skippedRows.map((s) => ({ row: s.row, message: s.reason })), // backward compat
+        csvRange: {
+          minStart: csvRange.minStart.toISOString(),
+          maxEnd:   csvRange.maxEnd.toISOString(),
+        },
+      };
+      await prisma.allocationBatch.update({ where: { id: batch.id }, data: { log } });
+    } catch {
+      // Log save failed — import still succeeds
+    }
+
+    // Step 14: Update managerId from Director ID column, in chunks
+    for (let i = 0; i < managerUpdates.length; i += UPDATE_CHUNK_SIZE) {
+      const chunk = managerUpdates.slice(i, i + UPDATE_CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(({ userId, managerUserId }) =>
+          prisma.user.update({ where: { id: userId }, data: { managerId: managerUserId } }).catch(() => {
+            /* non-critical */
+          })
+        )
+      );
+      done += chunk.length;
+      send({ type: "progress", phase: "Allocations", done, total });
+    }
+
+    revalidateTag("allocations", "max" as never);
+    revalidateTag("users",       "max" as never);
+    revalidateTag("projects",    "max" as never);
+
+    return {
+      batchId:              batch.id,
+      label:                batch.label,
+      created,
+      updated:              0,           // backward compat
+      deleted:              deletedCount,
+      overlapsDetected:     overlapConflicts.length,
+      skippedRows,
+      employeesAutoCreated,
+      projectsAutoCreated,
+      errors:               skippedRows.map((s) => ({ row: s.row, message: s.reason })),
+      csvRange: {
+        minStart: csvRange.minStart.toISOString(),
+        maxEnd:   csvRange.maxEnd.toISOString(),
+      },
+    };
   });
 }

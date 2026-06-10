@@ -1,117 +1,117 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { ok, err, unauthorized } from "@/lib/apiResponse";
+import { err, unauthorized } from "@/lib/apiResponse";
 import { revalidateTag } from "next/cache";
+import { streamImport } from "@/lib/importStream";
+import {
+  planProjectImport,
+  type ProjImportRow,
+  type ExistingProject,
+  type PMCandidate,
+} from "@/lib/projectImportUtils";
 
-function parseProjectDate(raw: string | undefined): Date | null {
-  if (!raw || raw.trim() === "") return null;
-  // Format: YYYY.MM.DD
-  const parts = raw.trim().split(".");
-  if (parts.length !== 3) return null;
-  const d = new Date(`${parts[0]}-${parts[1]}-${parts[2]}T00:00:00Z`);
-  return isNaN(d.getTime()) ? null : d;
-}
-
-function mapStatus(raw: string): string {
-  const s = raw.trim().toLowerCase();
-  if (s === "active" || s === "on demand") return "ACTIVE";
-  if (s === "close" || s === "closed" || s === "completed") return "COMPLETED";
-  return "ACTIVE";
-}
+const UPDATE_CHUNK_SIZE = 25;
+const PM_ROLES = ["PROJECT_MANAGER", "DIVISION_OWNER", "ADMIN"];
 
 // POST /api/import/projects
-// Body: { rows: Array<{ projectId, name, status, directorId, startDate?, endDate? }> }
+// Body: { rows: Array<{ projectId, name, status, directorId, pmName?, startDate?, endDate? }> }
+//
+// All lookups are batch-fetched up front (a handful of queries regardless of
+// row count) and the create/update plan is computed in memory via
+// planProjectImport — avoids the N+1 query pattern (~5 queries/row) that
+// would time out on Vercel for the ~2,500-row Projects File.
+//
+// Streams ndjson progress events while applying the plan (see streamImport).
 export async function POST(req: Request) {
   const session = await auth();
   if (!session) return unauthorized();
   if (session.user.role !== "ADMIN") return err("Forbidden", 403);
 
   const body = await req.json();
-  const { rows } = body as {
-    rows: Array<{
-      projectId:  string;
-      name:       string;
-      status:     string;
-      directorId: string;
-      pmName?:    string;
-      startDate?: string;
-      endDate?:   string;
-    }>;
-  };
+  const { rows } = body as { rows: ProjImportRow[] };
 
   if (!Array.isArray(rows) || rows.length === 0) return err("rows must be a non-empty array");
 
-  const created: string[] = [];
-  const updated: string[] = [];
-  const errors: { projectId: string; message: string }[] = [];
+  const directorIds = [...new Set(rows.map((r) => r.directorId).filter(Boolean))];
+  const projectIds  = rows.map((r) => r.projectId);
+  const codes       = projectIds.map((id) => `P-${id}`);
 
-  for (const row of rows) {
-    const { projectId, name, status, directorId, pmName, startDate, endDate } = row;
+  const [directors, pmUsers, existingProjects] = await Promise.all([
+    prisma.user.findMany({
+      where:  { externalId: { in: directorIds } },
+      select: { id: true, externalId: true },
+    }),
+    prisma.user.findMany({
+      where:  { isActive: true, role: { in: PM_ROLES } },
+      select: { id: true, name: true },
+    }),
+    prisma.project.findMany({
+      where:  { OR: [{ externalId: { in: projectIds } }, { code: { in: codes } }] },
+      select: { id: true, externalId: true, code: true, divisionId: true, startDate: true, endDate: true },
+    }),
+  ]);
 
-    try {
-      // Find the division via the director's externalId
-      const directorUser = await prisma.user.findFirst({ where: { externalId: directorId } });
-      const division = directorUser
-        ? await prisma.division.findFirst({ where: { ownerId: directorUser.id } })
-        : null;
+  const divisions = directors.length
+    ? await prisma.division.findMany({
+        where:  { ownerId: { in: directors.map((d) => d.id) } },
+        select: { id: true, ownerId: true },
+      })
+    : [];
 
-      // Resolve PM by name match
-      let managerId: string | null = null;
-      if (pmName?.trim()) {
-        const pmUser = await prisma.user.findFirst({
-          where: {
-            name:     { contains: pmName.trim(), mode: "insensitive" },
-            isActive: true,
-            role:     { in: ["PROJECT_MANAGER", "DIVISION_OWNER", "ADMIN"] },
-          },
-        });
-        managerId = pmUser?.id ?? null;
-      }
-
-      const code      = `P-${projectId}`;
-      const appStatus = mapStatus(status);
-      const start     = parseProjectDate(startDate);
-      const end       = parseProjectDate(endDate);
-
-      const existing = await prisma.project.findFirst({
-        where: { OR: [{ externalId: projectId }, { code }] },
-      });
-
-      if (existing) {
-        await prisma.project.update({
-          where: { id: existing.id },
-          data:  {
-            name,
-            status:     appStatus,
-            divisionId: division?.id ?? existing.divisionId,
-            externalId: projectId,
-            startDate:  start ?? existing.startDate,
-            endDate:    end   ?? existing.endDate,
-            ...(managerId ? { managerId } : {}),
-          },
-        });
-        updated.push(name);
-      } else {
-        await prisma.project.create({
-          data: {
-            name,
-            code,
-            status:     appStatus,
-            divisionId: division?.id ?? null,
-            externalId: projectId,
-            managerId,
-            startDate:  start ?? undefined,
-            endDate:    end   ?? undefined,
-          },
-        });
-        created.push(name);
-      }
-    } catch (e: unknown) {
-      errors.push({ projectId, message: String(e) });
-    }
+  const divisionByOwnerId = new Map(divisions.map((d) => [d.ownerId as string, d.id]));
+  const divisionByDirectorId = new Map<string, string>();
+  for (const d of directors) {
+    const divId = divisionByOwnerId.get(d.id);
+    if (divId && d.externalId) divisionByDirectorId.set(d.externalId, divId);
   }
 
-  revalidateTag("projects", "max" as never);
+  const pmCandidates: PMCandidate[] = pmUsers.map((u) => ({ id: u.id, name: u.name ?? "" }));
 
-  return ok({ created: created.length, updated: updated.length, errors });
+  const existingByExternalId = new Map<string, ExistingProject>();
+  const existingByCode       = new Map<string, ExistingProject>();
+  for (const p of existingProjects) {
+    const rec: ExistingProject = { id: p.id, divisionId: p.divisionId, startDate: p.startDate, endDate: p.endDate };
+    if (p.externalId) existingByExternalId.set(p.externalId, rec);
+    existingByCode.set(p.code, rec);
+  }
+
+  const plan = planProjectImport(rows, {
+    divisionByDirectorId,
+    pmCandidates,
+    existingByExternalId,
+    existingByCode,
+  });
+
+  return streamImport(async (send) => {
+    const errors: { projectId: string; message: string }[] = [];
+    const total = plan.projectsToCreate.length + plan.projectsToUpdate.length;
+    let done = 0;
+
+    if (plan.projectsToCreate.length > 0) {
+      try {
+        await prisma.project.createMany({ data: plan.projectsToCreate, skipDuplicates: true });
+      } catch (e: unknown) {
+        errors.push({ projectId: "(new projects)", message: String(e) });
+      }
+      done += plan.projectsToCreate.length;
+    }
+    send({ type: "progress", phase: "Projects", done, total });
+
+    for (let i = 0; i < plan.projectsToUpdate.length; i += UPDATE_CHUNK_SIZE) {
+      const chunk = plan.projectsToUpdate.slice(i, i + UPDATE_CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(({ id, projectId, data }) =>
+          prisma.project.update({ where: { id }, data }).catch((e: unknown) => {
+            errors.push({ projectId, message: String(e) });
+          })
+        )
+      );
+      done += chunk.length;
+      send({ type: "progress", phase: "Projects", done, total });
+    }
+
+    revalidateTag("projects", "max" as never);
+
+    return { created: plan.created.length, updated: plan.updated.length, errors };
+  });
 }

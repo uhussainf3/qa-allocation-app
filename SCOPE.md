@@ -99,6 +99,7 @@ Claude reads this at the start of every session and updates it as features are c
 | 38 | Leave multi-level approval workflow | ✅ Done | PM L1 → DO L2; clientApproval + backupPlan fields; leave hours deducted from project totals; leaveUtils.ts extracted; leaveUtils.test.ts (27 tests) |
 | 39 | Integration test — GET /api/leave response contract | ✅ Done | leaveApi.integration.test.ts (16 tests); mocks Prisma+auth; asserts flat approverName shape, projectNames, date serialization, 401 guard |
 | 40 | Bench role tiles — sum of bench % | ✅ Done | Each role tile now shows resource count + sum of onBenchPct for that role; buildRoleTiles updated; benchUtils.test.ts now 26 tests |
+| 41 | RM Migration — batch projects/allocations imports + live progress | ✅ Done | Same N+1-elimination pattern as employees applied to /api/import/projects (planProjectImport, projectImportUtils.test.ts, 16 tests) and /api/import/allocations (Steps 3/4/12/14 batched/chunked); new src/lib/importStream.ts streams ndjson progress events; ImportClient shows live "X / Y processed" during RM Migration |
 
 ---
 

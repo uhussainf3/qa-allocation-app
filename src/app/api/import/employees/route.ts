@@ -1,7 +1,8 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { ok, err, unauthorized } from "@/lib/apiResponse";
+import { err, unauthorized } from "@/lib/apiResponse";
 import { revalidateTag } from "next/cache";
+import { streamImport } from "@/lib/importStream";
 import {
   planEmployeeImport,
   type EmpImportRow,
@@ -81,40 +82,48 @@ export async function POST(req: Request) {
     existingJobTitles: existingJobTitleSet,
   });
 
-  const errors: { fomsId: string; message: string }[] = [];
+  return streamImport(async (send) => {
+    const errors: { fomsId: string; message: string }[] = [];
+    const total = plan.usersToCreate.length + plan.usersToUpdate.length;
+    let done = 0;
 
-  if (plan.jobTitlesToCreate.length > 0) {
-    try {
-      await prisma.jobTitle.createMany({
-        data: plan.jobTitlesToCreate.map((name) => ({ name })),
-        skipDuplicates: true,
-      });
-    } catch (e: unknown) {
-      errors.push({ fomsId: "(job titles)", message: String(e) });
+    if (plan.jobTitlesToCreate.length > 0) {
+      try {
+        await prisma.jobTitle.createMany({
+          data: plan.jobTitlesToCreate.map((name) => ({ name })),
+          skipDuplicates: true,
+        });
+      } catch (e: unknown) {
+        errors.push({ fomsId: "(job titles)", message: String(e) });
+      }
     }
-  }
 
-  if (plan.usersToCreate.length > 0) {
-    try {
-      await prisma.user.createMany({ data: plan.usersToCreate, skipDuplicates: true });
-    } catch (e: unknown) {
-      errors.push({ fomsId: "(new employees)", message: String(e) });
+    if (plan.usersToCreate.length > 0) {
+      try {
+        await prisma.user.createMany({ data: plan.usersToCreate, skipDuplicates: true });
+      } catch (e: unknown) {
+        errors.push({ fomsId: "(new employees)", message: String(e) });
+      }
+      done += plan.usersToCreate.length;
     }
-  }
+    send({ type: "progress", phase: "Employees", done, total });
 
-  for (let i = 0; i < plan.usersToUpdate.length; i += UPDATE_CHUNK_SIZE) {
-    const chunk = plan.usersToUpdate.slice(i, i + UPDATE_CHUNK_SIZE);
-    await Promise.all(
-      chunk.map(({ id, fomsId, data }) =>
-        prisma.user.update({ where: { id }, data }).catch((e: unknown) => {
-          errors.push({ fomsId, message: String(e) });
-        })
-      )
-    );
-  }
+    for (let i = 0; i < plan.usersToUpdate.length; i += UPDATE_CHUNK_SIZE) {
+      const chunk = plan.usersToUpdate.slice(i, i + UPDATE_CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(({ id, fomsId, data }) =>
+          prisma.user.update({ where: { id }, data }).catch((e: unknown) => {
+            errors.push({ fomsId, message: String(e) });
+          })
+        )
+      );
+      done += chunk.length;
+      send({ type: "progress", phase: "Employees", done, total });
+    }
 
-  revalidateTag("users",      "max" as never);
-  revalidateTag("job-titles", "max" as never);
+    revalidateTag("users",      "max" as never);
+    revalidateTag("job-titles", "max" as never);
 
-  return ok({ created: plan.created.length, skipped: plan.skipped.length, errors });
+    return { created: plan.created.length, skipped: plan.skipped.length, errors };
+  });
 }

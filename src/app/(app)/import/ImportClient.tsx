@@ -183,6 +183,7 @@ function RMImport() {
   const [preview, setPreview]           = useState<{ divisions: number; projects: number; employees: number; allocations: number } | null>(null);
   const [log, setLog]                   = useState<PhaseResult[]>([]);
   const [running, setRunning]           = useState(false);
+  const [progress, setProgress]         = useState<{ phase: string; done: number; total: number } | null>(null);
 
   // Parsed data
   type EmpRow  = { fomsId: string; name: string; email: string; rmRole: string; position: string };
@@ -308,40 +309,89 @@ function RMImport() {
   async function runImports() {
     setRunning(true);
     setPhase("running");
+    setProgress(null);
     const results: PhaseResult[] = [];
 
-    async function post(url: string, body: unknown): Promise<Record<string, unknown>> {
+    // Posts a request and, if the route streams ndjson progress events
+    // ({type:"progress"|"done"|"error"}), surfaces live "done/total" counts
+    // via onProgress as they arrive. Falls back to a plain res.json() for
+    // routes that respond with a normal JSON body (e.g. /api/import/divisions).
+    async function postWithProgress(
+      url: string,
+      body: unknown,
+      onProgress: (phase: string, done: number, total: number) => void
+    ): Promise<Record<string, unknown>> {
       const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      return res.json();
+
+      const contentType = res.headers.get("Content-Type") ?? "";
+      if (!res.body || !contentType.includes("ndjson")) {
+        return res.json();
+      }
+
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let result: Record<string, unknown> = {};
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let nl;
+        while ((nl = buffer.indexOf("\n")) >= 0) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (!line) continue;
+
+          const evt = JSON.parse(line) as
+            | { type: "progress"; phase: string; done: number; total: number }
+            | { type: "done"; result: Record<string, unknown> }
+            | { type: "error"; message: string };
+
+          if (evt.type === "progress") onProgress(evt.phase, evt.done, evt.total);
+          else if (evt.type === "done") result = evt.result;
+          else if (evt.type === "error") throw new Error(evt.message);
+        }
+      }
+      return result;
+    }
+
+    function onProgress(phase: string, done: number, total: number) {
+      setProgress({ phase, done, total });
     }
 
     // Step 2: Divisions
     try {
-      const d = await post("/api/import/divisions", { rows: divRows }) as { created?: number; skipped?: number; errors?: unknown[] };
+      const d = await postWithProgress("/api/import/divisions", { rows: divRows }, onProgress) as { created?: number; skipped?: number; errors?: unknown[] };
       results.push({ label: "Divisions", created: d.created ?? 0, skipped: d.skipped ?? 0, errors: (d.errors as PhaseResult["errors"]) ?? [] });
     } catch (e) { results.push({ label: "Divisions", created: 0, skipped: 0, errors: [{ message: String(e) }] }); }
     setLog([...results]);
+    setProgress(null);
 
     // Step 3: Projects
     try {
-      const d = await post("/api/import/projects", { rows: projRows }) as { created?: number; updated?: number; errors?: unknown[] };
+      const d = await postWithProgress("/api/import/projects", { rows: projRows }, onProgress) as { created?: number; updated?: number; errors?: unknown[] };
       results.push({ label: "Projects", created: (d.created ?? 0) + (d.updated ?? 0), skipped: 0, errors: (d.errors as PhaseResult["errors"]) ?? [] });
     } catch (e) { results.push({ label: "Projects", created: 0, skipped: 0, errors: [{ message: String(e) }] }); }
     setLog([...results]);
+    setProgress(null);
 
     // Step 4: Employees
     try {
-      const d = await post("/api/import/employees", { rows: empRows }) as { created?: number; skipped?: number; errors?: unknown[] };
+      const d = await postWithProgress("/api/import/employees", { rows: empRows }, onProgress) as { created?: number; skipped?: number; errors?: unknown[] };
       results.push({ label: "Employees", created: d.created ?? 0, skipped: d.skipped ?? 0, errors: (d.errors as PhaseResult["errors"]) ?? [] });
     } catch (e) { results.push({ label: "Employees", created: 0, skipped: 0, errors: [{ message: String(e) }] }); }
     setLog([...results]);
+    setProgress(null);
 
     // Step 5: Allocations
     try {
-      const d = await post("/api/import/allocations", { label: batchLabel, sourceFile: rmDataFile!.name, rows: allocRows }) as { created?: number; skipped?: number; errors?: unknown[]; batchId?: string };
+      const d = await postWithProgress("/api/import/allocations", { label: batchLabel, sourceFile: rmDataFile!.name, rows: allocRows }, onProgress) as { created?: number; skipped?: number; errors?: unknown[]; batchId?: string };
       results.push({ label: "Allocations", created: d.created ?? 0, skipped: d.skipped ?? 0, errors: (d.errors as PhaseResult["errors"]) ?? [] });
     } catch (e) { results.push({ label: "Allocations", created: 0, skipped: 0, errors: [{ message: String(e) }] }); }
     setLog([...results]);
+    setProgress(null);
 
     setRunning(false);
     setPhase("done");
@@ -447,6 +497,11 @@ function RMImport() {
                   <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
                     {result.created} imported{result.skipped > 0 ? `, ${result.skipped} skipped` : ""}
                     {result.errors.length > 0 ? `, ${result.errors.length} errors` : ""}
+                  </div>
+                )}
+                {!result && isActive && progress?.phase === s && progress.total > 0 && (
+                  <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    {progress.done.toLocaleString()} / {progress.total.toLocaleString()} processed
                   </div>
                 )}
               </div>
