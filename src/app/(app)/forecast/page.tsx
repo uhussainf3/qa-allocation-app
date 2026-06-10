@@ -3,14 +3,15 @@ import { getNextNWeeks, getWeekLabel, workingDaysInWeek } from "@/lib/weeks";
 import { getCachedSimpleUsers, getCachedAllocationsMinimal, getCachedPublicHolidays, getCachedDivisions } from "@/lib/queries";
 import { Suspense } from "react";
 import { DivisionFilter } from "@/components/DivisionFilter";
+import { RoleFilter } from "@/components/RoleFilter";
 
 export default async function ForecastPage({
   searchParams,
 }: {
-  searchParams: Promise<{ division?: string }>;
+  searchParams: Promise<{ division?: string; role?: string }>;
 }) {
   await auth();
-  const { division: divisionId } = await searchParams;
+  const { division: divisionId, role } = await searchParams;
 
   const weeks90 = getNextNWeeks(13);
   const weekEnd = new Date(weeks90[weeks90.length - 1]);
@@ -23,10 +24,13 @@ export default async function ForecastPage({
     getCachedDivisions(),
   ]);
 
-  // Apply division filter
-  const users = divisionId
-    ? allUsers.filter((u) => u.divisionId === divisionId)
-    : allUsers;
+  // Unique departments for RoleFilter dropdown (from all users, unfiltered)
+  const departments = [...new Set(allUsers.flatMap((u) => u.department ? [u.department] : []))].sort();
+
+  // Apply division filter then role filter
+  const users = allUsers
+    .filter((u) => !divisionId || u.divisionId === divisionId)
+    .filter((u) => !role        || u.department === role);
 
   const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));
   const holidays    = new Set(rawHolidays.map((h) => h.date));
@@ -43,14 +47,12 @@ export default async function ForecastPage({
     return days;
   }
 
-  // Filter allocations to only visible users
+  // Filter allocations to only visible users (always, since users may be filtered by division or role)
   const userIds = new Set(users.map((u) => u.id));
-  const filteredAllocs = divisionId
-    ? allocations.filter((a) => userIds.has(a.userId))
-    : allocations;
+  const filteredAllocs = allocations.filter((a) => userIds.has(a.userId));
 
   const weeksData = weeks90.map((w, i) => {
-    const demand  = filteredAllocs.reduce((s, a) => s + workingDaysInWeek(w, a.startDate, a.endDate, holidays) * a.hoursPerDay, 0);
+    const demand  = Math.round(filteredAllocs.reduce((s, a) => s + workingDaysInWeek(w, a.startDate, a.endDate, holidays) * a.hoursPerDay, 0));
     const wDays   = weekWorkingDays(w);
     const weekCap = users.reduce((s, u) => s + u.capacity * wDays / 5, 0);
     const utilPct = weekCap > 0 ? Math.round((demand / weekCap) * 100) : 0;
@@ -75,11 +77,19 @@ export default async function ForecastPage({
           <div className="page-sub">
             Demand vs capacity — 30, 60, 90 day view
             {divisionId && divisions.find((d) => d.id === divisionId) && ` · ${divisions.find((d) => d.id === divisionId)!.name}`}
+            {role && ` · ${role}`}
           </div>
         </div>
-        <Suspense>
-          <DivisionFilter divisions={divisionsMeta} value={divisionId ?? ""} />
-        </Suspense>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <Suspense>
+            <DivisionFilter divisions={divisionsMeta} value={divisionId ?? ""} />
+          </Suspense>
+          {departments.length > 0 && (
+            <Suspense>
+              <RoleFilter roles={departments} value={role ?? ""} />
+            </Suspense>
+          )}
+        </div>
       </div>
 
       <div className="kpis" style={{ marginBottom: 24 }}>

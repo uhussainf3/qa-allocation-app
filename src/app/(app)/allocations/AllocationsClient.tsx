@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getNextNWeeks, getWeekLabel, getWeekRange, getMondayOf, addWeeks } from "@/lib/weeks";
 import type { Role, JobTitle } from "@/types/enums";
@@ -599,8 +599,8 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
                 const totalPct = totalCap > 0 ? Math.round((totalH / totalCap) * 100) : 0;
                 const lines    = Object.entries(allocMap[u.id] ?? {});
                 return (
-                  <>
-                    <div key={`person-${u.id}`} className="ag-cell ag-row-person" onClick={() => toggle(u.id)} style={{ gap: 6, cursor: "pointer" }}>
+                  <React.Fragment key={u.id}>
+                    <div className="ag-cell ag-row-person" onClick={() => toggle(u.id)} style={{ gap: 6, cursor: "pointer" }}>
                       <span className={`caret ${open ? "open" : ""}`}>›</span>
                       <div className="person">
                         <span className="avatar">{initials(u.name, u.email)}</span>
@@ -619,7 +619,7 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
                         />
                       </div>
                     ))}
-                    <div key={`total-${u.id}`} className="ag-cell ag-row-person" style={{ padding: 0 }}>
+                    <div className="ag-cell ag-row-person" style={{ padding: 0 }}>
                       <div className={`total-cell ${totalPct > 100 ? "bad" : ""}`}>
                         <span className="t-h">{r1(totalH)}h</span>
                         <span className="t-p">{totalPct}% · cap {totalCap}h</span>
@@ -631,8 +631,8 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
                       const proj = projects.find((p) => p.id === projectId);
                       if (!proj) return null;
                       return (
-                        <>
-                          <div key={`task-name-${key}`} className="ag-cell ag-row-task">
+                        <React.Fragment key={key}>
+                          <div className="ag-cell ag-row-task">
                             <div className="row-task-name">
                               <span className="proj-dot" style={{ background: proj.color }} />
                               <div style={{ color: "var(--text)" }}>{proj.name}</div>
@@ -650,15 +650,15 @@ export function AllocationsClient({ currentUserRole, divisions }: Props) {
                               {canEdit && entry.hours === 0 && <span className="edit-hint" style={{ marginLeft: 4, opacity: 0.4, fontSize: 10 }}>+</span>}
                             </div>
                           ))}
-                          <div key={`task-sum-${key}`} className="ag-cell ag-row-task" style={{ justifyContent: "flex-end" }}>
+                          <div className="ag-cell ag-row-task" style={{ justifyContent: "flex-end" }}>
                             <span className="mono" style={{ color: "var(--text-secondary)", fontSize: 12 }}>
                               {r1(entries.reduce((s, e) => s + e.hours, 0))}h
                             </span>
                           </div>
-                        </>
+                        </React.Fragment>
                       );
                     })}
-                  </>
+                  </React.Fragment>
                 );
               })}
 

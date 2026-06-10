@@ -1,6 +1,8 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { totalWorkingDays } from "@/lib/weeks";
+import { getCachedAllAllocationsForProjects, getCachedPublicHolidays } from "@/lib/queries";
 import { DashboardClient } from "./DashboardClient";
 
 export const metadata = { title: "Executive Dashboard" };
@@ -23,6 +25,9 @@ export default async function DashboardPage() {
     openLeaves,
     pipeline,
     recentAllocations,
+    billingProjects,
+    allProjectAllocations,
+    rawHolidays,
   ] = await Promise.all([
     // Divisions with counts
     prisma.division.findMany({
@@ -86,7 +91,24 @@ export default async function DashboardPage() {
       orderBy: { endDate: "asc" },
       take: 20,
     }),
+
+    // All projects with billing fields — used to compute Top Projects by Hours-to-Date
+    prisma.project.findMany({
+      select: {
+        id: true, name: true, code: true, color: true, status: true,
+        divisionId: true, sanctionedHours: true, hourlyRate: true,
+        manager: { select: { name: true } },
+      },
+    }),
+
+    // All allocations (date ranges) — used to compute hours-to-date per project
+    getCachedAllAllocationsForProjects(),
+
+    // Public holidays — needed for working-day calculations
+    getCachedPublicHolidays(),
   ]);
+
+  const holidays = new Set(rawHolidays.map((h) => h.date));
 
   // ── Serialise dates ────────────────────────────────────────────────────────
   const serialisedDivisions = divisions.map((d) => ({
@@ -120,6 +142,56 @@ export default async function DashboardPage() {
     return { ...d, utilPct: pct, headcount: members.length };
   });
 
+  // ── Top projects by Hours-to-Date (with billed-amount figures) ──────────────
+  const hoursToDateMap:   Record<string, number>                   = {};
+  const allocatedHoursMap: Record<string, number>                  = {};
+  // deptHoursMap[projectId][department] = hoursToDate contributed by that dept
+  const deptHoursMap: Record<string, Record<string, number>>       = {};
+  const departmentSet = new Set<string>();
+
+  for (const a of allProjectAllocations) {
+    const start = new Date(a.startDate);
+    const end   = new Date(a.endDate);
+
+    const totalDays = totalWorkingDays(start, end, holidays);
+    allocatedHoursMap[a.projectId] = (allocatedHoursMap[a.projectId] ?? 0) + Math.round(totalDays * a.hoursPerDay * 10) / 10;
+
+    const effectiveEnd = end < today ? end : today;
+    const toDateDays   = start > today ? 0 : totalWorkingDays(start, effectiveEnd, holidays);
+    const toDateHrs    = Math.round(toDateDays * a.hoursPerDay * 10) / 10;
+    hoursToDateMap[a.projectId] = (hoursToDateMap[a.projectId] ?? 0) + toDateHrs;
+
+    // per-department breakdown
+    if (a.department) {
+      departmentSet.add(a.department);
+      if (!deptHoursMap[a.projectId]) deptHoursMap[a.projectId] = {};
+      deptHoursMap[a.projectId][a.department] =
+        (deptHoursMap[a.projectId][a.department] ?? 0) + toDateHrs;
+    }
+  }
+
+  // All projects with hours activity — NOT pre-sliced; client does the top-10 cut
+  const topProjects = billingProjects
+    .map((p) => {
+      const hoursToDate    = Math.round((hoursToDateMap[p.id]    ?? 0) * 10) / 10;
+      const allocatedHours = Math.round((allocatedHoursMap[p.id] ?? 0) * 10) / 10;
+      const rate           = p.hourlyRate ?? 0;
+      return {
+        id: p.id, name: p.name, code: p.code, color: p.color, status: p.status,
+        divisionId: p.divisionId, managerName: p.manager?.name ?? null,
+        sanctionedHours: p.sanctionedHours, hourlyRate: p.hourlyRate,
+        hoursToDate, allocatedHours,
+        contractedValue: Math.round(p.sanctionedHours * rate * 100) / 100,
+        allocatedValue:  Math.round(allocatedHours    * rate * 100) / 100,
+        billedToDate:    Math.round(hoursToDate       * rate * 100) / 100,
+        departmentHours: deptHoursMap[p.id] ?? {},
+      };
+    })
+    .filter((p) => p.hoursToDate > 0)
+    .sort((a, b) => b.hoursToDate - a.hoursToDate);
+
+  const departments = [...departmentSet].sort();
+
   return (
     <DashboardClient
       todayISO={todayISO}
@@ -130,6 +202,8 @@ export default async function DashboardPage() {
       pendingLeaveCount={openLeaves.length}
       pipelineCount={pipeline.length}
       divStats={divStats}
+      topProjects={topProjects}
+      departments={departments}
       endingSoon={recentAllocations.map((a) => ({
         userName:    a.user.name ?? "—",
         projectName: a.project.name,

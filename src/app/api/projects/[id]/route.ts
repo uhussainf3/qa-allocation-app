@@ -9,11 +9,13 @@ const updateSchema = z.object({
   description: z.string().optional(),
   clientName: z.string().optional(),
   sanctionedHours: z.number().min(0).optional(),
+  hourlyRate: z.number().min(0).nullable().optional(),
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
   color: z.string().optional(),
   status: z.enum(["ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"]).optional(),
   managerId: z.string().nullable().optional(),
+  divisionId: z.string().nullable().optional(),
 });
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {

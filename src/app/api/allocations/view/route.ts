@@ -33,6 +33,7 @@ export async function GET(req: Request) {
         where: { batchId },
         include: {
           project: { select: { id: true, name: true, code: true, color: true } },
+          user:    { select: { id: true, name: true, email: true } },
           task:    { select: { id: true, name: true } },
         },
       }),

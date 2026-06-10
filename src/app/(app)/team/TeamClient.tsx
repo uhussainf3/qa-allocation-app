@@ -134,7 +134,7 @@ export function TeamClient({ users: initial, divisions, jobTitles }: Props) {
         isActive:   form.isActive,
         isOnshore:  form.isOnshore,
       };
-      if (!editTarget) payload.email = form.email.trim();
+      if (form.email.trim()) payload.email = form.email.trim();
 
       const res  = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const json = await res.json();
@@ -344,12 +344,10 @@ export function TeamClient({ users: initial, divisions, jobTitles }: Props) {
                 <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="John Smith" style={{ width: "100%" }} />
               </label>
 
-              {!editTarget && (
-                <label style={{ fontSize: 13, gridColumn: "1/-1" }}>
-                  <div style={{ marginBottom: 4, fontWeight: 500 }}>Email *</div>
-                  <input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="john@folio3.com" style={{ width: "100%" }} />
-                </label>
-              )}
+              <label style={{ fontSize: 13, gridColumn: "1/-1" }}>
+                <div style={{ marginBottom: 4, fontWeight: 500 }}>Email {!editTarget && "*"}</div>
+                <input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="john@folio3.com" style={{ width: "100%" }} />
+              </label>
 
               <label style={{ fontSize: 13 }}>
                 <div style={{ marginBottom: 4, fontWeight: 500 }}>System Role</div>

@@ -46,13 +46,14 @@ type ProjectRef  = { id: string; name: string; code: string; color: string };
 interface Props {
   bench:     BenchUser[];
   bench30:   Record<string, number>;   // userId → onBenchPct at +30 days
+  bench60:   Record<string, number>;   // userId → onBenchPct at +60 days
   allUsers:  SimpleUser[];
   divisions: DivisionRef[];
   projects:  ProjectRef[];
   pmUserMap: Record<string, string[]>; // pmId → userIds with allocations on PM's projects
 }
 
-type View = "detailed" | "simple" | "thirty";
+type View = "detailed" | "simple" | "thirty" | "sixty";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -211,7 +212,7 @@ function AddAllocModal({ user, projects, onClose, onSaved }: AddAllocModalProps)
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function BenchClient({ bench, bench30, allUsers, divisions, projects, pmUserMap }: Props) {
+export function BenchClient({ bench, bench30, bench60, allUsers, divisions, projects, pmUserMap }: Props) {
   const router = useRouter();
 
   const [view,           setView]           = useState<View>("detailed");
@@ -229,12 +230,12 @@ export function BenchClient({ bench, bench30, allUsers, divisions, projects, pmU
       .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")),
   [allUsers]);
 
-  // Unique role options (departments) from all bench users
+  // Unique role options (departments) from all users (so filter works across all views)
   const roleOptions = useMemo(() => {
     const seen = new Set<string>();
-    bench.forEach((u) => { if (u.department) seen.add(u.department); });
+    allUsers.forEach((u) => { if (u.department) seen.add(u.department); });
     return [...seen].sort();
-  }, [bench]);
+  }, [allUsers]);
 
   // Apply all filters to today's bench
   const visibleBench = useMemo(() => {
@@ -261,6 +262,20 @@ export function BenchClient({ bench, bench30, allUsers, divisions, projects, pmU
       .sort((a, b) => b.onBenchPct - a.onBenchPct);
   }, [allUsers, bench30, pmUserMap, divisionFilter, pmFilter, roleFilter]);
 
+  // For 60-day view: all users who will have bench capacity at +60 days
+  const bench60Users = useMemo(() => {
+    const pmUserIds = pmFilter ? new Set(pmUserMap[pmFilter] ?? []) : null;
+    const filtered = allUsers.filter((u) => {
+      if (divisionFilter && u.divisionId !== divisionFilter) return false;
+      if (roleFilter     && u.department  !== roleFilter)    return false;
+      if (pmUserIds      && !pmUserIds.has(u.id))            return false;
+      return (bench60[u.id] ?? 0) > 0;
+    });
+    return filtered
+      .map((u) => ({ ...u, onBenchPct: bench60[u.id] ?? 0 }))
+      .sort((a, b) => b.onBenchPct - a.onBenchPct);
+  }, [allUsers, bench60, pmUserMap, divisionFilter, pmFilter, roleFilter]);
+
   // KPIs (today)
   const fullyFree      = visibleBench.filter((u) => u.onBenchPct === 100).length;
   const partialFree    = visibleBench.filter((u) => u.onBenchPct > 0 && u.onBenchPct < 100).length;
@@ -269,12 +284,39 @@ export function BenchClient({ bench, bench30, allUsers, divisions, projects, pmU
   ) / 10;
   const sumBenchPct    = visibleBench.reduce((s, u) => s + u.onBenchPct, 0);
 
+  // Sum of bench % for snapshot views
+  const sum30BenchPct  = bench30Users.reduce((s, u) => s + u.onBenchPct, 0);
+  const sum60BenchPct  = bench60Users.reduce((s, u) => s + u.onBenchPct, 0);
+
+  // Role tiles — resource count + sum of bench % per department
+  const roleTiles = useMemo(() => {
+    const src         = view === "thirty" ? bench30Users : view === "sixty" ? bench60Users : visibleBench;
+    const countMap    = new Map<string, number>();
+    const benchSumMap = new Map<string, number>();
+    for (const u of src) {
+      if (!u.department) continue;
+      countMap.set(u.department,    (countMap.get(u.department)    ?? 0) + 1);
+      benchSumMap.set(u.department, (benchSumMap.get(u.department) ?? 0) + u.onBenchPct);
+    }
+    return [...countMap.entries()]
+      .map(([role, count]) => ({ role, count, sumBenchPct: benchSumMap.get(role) ?? 0 }))
+      .sort((a, b) => b.count - a.count);
+  }, [view, visibleBench, bench30Users, bench60Users]);
+
   // ── CSV Export ────────────────────────────────────────────────────────────
   function exportCsv() {
     let headers: string[];
     let rows: string[][];
 
-    if (view === "thirty") {
+    if (view === "sixty") {
+      headers = ["Name", "Role", "Department", "Bench % (in 60 days)"];
+      rows = bench60Users.map((u) => [
+        u.name ?? u.email ?? "",
+        u.jobTitle ?? u.role.replace(/_/g, " "),
+        u.department ?? "",
+        String(u.onBenchPct),
+      ]);
+    } else if (view === "thirty") {
       headers = ["Name", "Role", "Department", "Bench % (in 30 days)"];
       rows = bench30Users.map((u) => [
         u.name ?? u.email ?? "",
@@ -327,6 +369,8 @@ export function BenchClient({ bench, bench30, allUsers, divisions, projects, pmU
           <div className="page-sub">
             {view === "thirty"
               ? `In 30 days (${new Date(Date.now() + 30 * 864e5).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}) · ${bench30Users.length} resource${bench30Users.length !== 1 ? "s" : ""} available`
+              : view === "sixty"
+              ? `In 60 days (${new Date(Date.now() + 60 * 864e5).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}) · ${bench60Users.length} resource${bench60Users.length !== 1 ? "s" : ""} available`
               : `As of ${today} · ${visibleBench.length} resource${visibleBench.length !== 1 ? "s" : ""} available`
             }
           </div>
@@ -355,12 +399,13 @@ export function BenchClient({ bench, bench30, allUsers, divisions, projects, pmU
             <button className={view === "detailed" ? "active" : ""} onClick={() => setView("detailed")}>Detailed</button>
             <button className={view === "simple"   ? "active" : ""} onClick={() => setView("simple")}>Simple</button>
             <button className={view === "thirty"   ? "active" : ""} onClick={() => setView("thirty")}>+30 days</button>
+            <button className={view === "sixty"    ? "active" : ""} onClick={() => setView("sixty")}>+60 days</button>
           </div>
         </div>
       </div>
 
       {/* KPIs — only for today views */}
-      {view !== "thirty" && (
+      {view !== "thirty" && view !== "sixty" && (
         <div className="kpis" style={{ marginBottom: 20 }}>
           <div className="kpi ok">
             <div className="kpi-label">Fully on bench</div>
@@ -386,6 +431,55 @@ export function BenchClient({ bench, bench30, allUsers, divisions, projects, pmU
             <div className="kpi-label">Sum of bench %</div>
             <div className="kpi-value">{sumBenchPct}<span className="unit">%</span></div>
             <div className="kpi-meta">Across {visibleBench.length} resource{visibleBench.length !== 1 ? "s" : ""} on bench</div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Role tiles (all views) ───────────────────────────────────────────── */}
+      {roleTiles.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          {/* Total bench KPI for snapshot views */}
+          {(view === "thirty" || view === "sixty") && (
+            <div className="kpis" style={{ marginBottom: 14 }}>
+              <div className="kpi">
+                <div className="kpi-label">Total bench · {view === "thirty" ? "in 30 days" : "in 60 days"}</div>
+                <div className="kpi-value">
+                  {view === "thirty" ? bench30Users.length : bench60Users.length}
+                  <span className="unit">people</span>
+                </div>
+                <div className="kpi-meta">
+                  {new Date(Date.now() + (view === "thirty" ? 30 : 60) * 864e5).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+                </div>
+              </div>
+              <div className="kpi">
+                <div className="kpi-label">Sum of bench %</div>
+                <div className="kpi-value">
+                  {view === "thirty" ? sum30BenchPct : sum60BenchPct}
+                  <span className="unit">%</span>
+                </div>
+                <div className="kpi-meta">
+                  Across {view === "thirty" ? bench30Users.length : bench60Users.length} resource{(view === "thirty" ? bench30Users.length : bench60Users.length) !== 1 ? "s" : ""} on bench
+                </div>
+              </div>
+            </div>
+          )}
+          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
+            By Role
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {roleTiles.map(({ role, count, sumBenchPct }) => (
+              <div
+                key={role}
+                className="card"
+                style={{ flex: "0 0 auto", minWidth: 120, padding: "12px 16px", textAlign: "center" }}
+              >
+                <div style={{ fontSize: 24, fontWeight: 700, color: "var(--text)", lineHeight: 1 }}>{count}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ok)", marginTop: 5 }}>
+                  {sumBenchPct}%
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>{role}</div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -505,6 +599,34 @@ export function BenchClient({ bench, bench30, allUsers, divisions, projects, pmU
                 style={{
                   display: "flex", alignItems: "center", gap: 16, padding: "12px 16px",
                   borderBottom: i < bench30Users.length - 1 ? "1px solid var(--border)" : "none",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "var(--surface-2)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = ""; }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <ResourceCell {...u} />
+                </div>
+                <BenchBar pct={u.onBenchPct} />
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* ── +60-day view ─────────────────────────────────────────────────────── */}
+      {view === "sixty" && (
+        <div className="card" style={{ overflow: "hidden", padding: 0, maxWidth: 680 }}>
+          {bench60Users.length === 0 ? (
+            <div style={{ padding: 48, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>
+              Everyone will be fully allocated in 60 days.
+            </div>
+          ) : (
+            bench60Users.map((u, i) => (
+              <div
+                key={u.id}
+                style={{
+                  display: "flex", alignItems: "center", gap: 16, padding: "12px 16px",
+                  borderBottom: i < bench60Users.length - 1 ? "1px solid var(--border)" : "none",
                 }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "var(--surface-2)"; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = ""; }}

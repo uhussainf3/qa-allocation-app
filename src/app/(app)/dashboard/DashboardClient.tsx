@@ -24,6 +24,24 @@ type EndingSoon = {
   endDate:     string;
 };
 
+type TopProject = {
+  id:               string;
+  name:             string;
+  code:             string;
+  color:            string;
+  status:           string;
+  divisionId:       string | null;
+  managerName:      string | null;
+  sanctionedHours:  number;
+  hourlyRate:       number | null;
+  hoursToDate:      number;
+  allocatedHours:   number;
+  contractedValue:  number;
+  allocatedValue:   number;
+  billedToDate:     number;
+  departmentHours:  Record<string, number>;
+};
+
 type PipelineItem = {
   id:                string;
   name:              string;
@@ -44,6 +62,8 @@ interface Props {
   pendingLeaveCount:  number;
   pipelineCount:      number;
   divStats:           DivisionStat[];
+  topProjects:        TopProject[];
+  departments:        string[];
   endingSoon:         EndingSoon[];
   pipeline:           PipelineItem[];
   allDivisions:       { id: string; name: string; code: string; color: string }[];
@@ -53,6 +73,13 @@ interface Props {
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+function fmtCurrency(n: number | null | undefined) {
+  if (n == null) return "—";
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `$${(n / 1_000).toFixed(1)}k`;
+  return `$${n.toFixed(0)}`;
 }
 
 function utilColor(pct: number) {
@@ -72,9 +99,10 @@ const PIPELINE_LABELS: Record<string, string> = {
 export function DashboardClient({
   todayISO, totalHeadcount, utilPct, benchCount,
   activeProjectCount, pendingLeaveCount, pipelineCount,
-  divStats, endingSoon, pipeline, allDivisions,
+  divStats, topProjects, departments, endingSoon, pipeline, allDivisions,
 }: Props) {
   const [filterDivision, setFilterDivision] = useState("");
+  const [roleFilter,     setRoleFilter]     = useState("");
 
   const today = new Date(todayISO).toLocaleDateString("en-GB", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
@@ -91,6 +119,23 @@ export function DashboardClient({
     [endingSoon, filterDivision]
   );
 
+  const filteredTopProjects = useMemo(() => {
+    let list = topProjects;
+
+    // division filter
+    if (filterDivision) list = list.filter((p) => p.divisionId === filterDivision);
+
+    // role/department filter — re-sort by that dept's hours-to-date and only keep projects
+    // that actually have activity from that department
+    if (roleFilter) {
+      list = list
+        .filter((p) => (p.departmentHours[roleFilter] ?? 0) > 0)
+        .sort((a, b) => (b.departmentHours[roleFilter] ?? 0) - (a.departmentHours[roleFilter] ?? 0));
+    }
+
+    return list.slice(0, 10);
+  }, [topProjects, filterDivision, roleFilter]);
+
   return (
     <div className="page" data-screen-label="Dashboard">
 
@@ -100,18 +145,34 @@ export function DashboardClient({
           <h1 className="page-title">Executive Dashboard</h1>
           <div className="page-sub">{today}</div>
         </div>
-        {/* Division filter */}
-        <select
-          className="input"
-          value={filterDivision}
-          onChange={(e) => setFilterDivision(e.target.value)}
-          style={{ minWidth: 180 }}
-        >
-          <option value="">All Divisions</option>
-          {allDivisions.map((d) => (
-            <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
-          ))}
-        </select>
+        <div style={{ display: "flex", gap: 10 }}>
+          {/* Role / department filter (scopes the Top 10 Projects panel) */}
+          {departments.length > 0 && (
+            <select
+              className="input"
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              style={{ minWidth: 160 }}
+            >
+              <option value="">All Roles</option>
+              {departments.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          )}
+          {/* Division filter */}
+          <select
+            className="input"
+            value={filterDivision}
+            onChange={(e) => setFilterDivision(e.target.value)}
+            style={{ minWidth: 180 }}
+          >
+            <option value="">All Divisions</option>
+            {allDivisions.map((d) => (
+              <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* ── Company KPIs ── */}
@@ -187,6 +248,57 @@ export function DashboardClient({
           <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--text-muted)", gridColumn: "1/-1", fontSize: 14 }}>
             No divisions found.
           </div>
+        )}
+      </div>
+
+      {/* ── Top Projects by Hours-to-Date ── */}
+      <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        Top 10 Projects by Hours-to-Date{roleFilter && <span style={{ textTransform: "none", fontWeight: 400, marginLeft: 8, color: "var(--accent)", fontSize: 12 }}>· {roleFilter}</span>}
+      </h2>
+      <div className="card" style={{ padding: 0, overflow: "auto", marginBottom: 28 }}>
+        {filteredTopProjects.length === 0 ? (
+          <div style={{ padding: 32, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>No project activity recorded yet.</div>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
+                <th style={{ textAlign: "left",  padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Project</th>
+                <th style={{ textAlign: "left",  padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Manager</th>
+                <th style={{ textAlign: "right", padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Hours to Date</th>
+                <th style={{ textAlign: "right", padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Sanctioned</th>
+                <th style={{ textAlign: "right", padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>$ / hr</th>
+                <th style={{ textAlign: "right", padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Contracted Value</th>
+                <th style={{ textAlign: "right", padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Allocated Value</th>
+                <th style={{ textAlign: "right", padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Billed to Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTopProjects.map((p, i) => (
+                <tr key={p.id} style={{ borderBottom: i < filteredTopProjects.length - 1 ? "1px solid var(--border)" : "none" }}>
+                  <td style={{ padding: "10px 14px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ width: 9, height: 9, borderRadius: "50%", background: p.color, flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontWeight: 500 }}>{p.name}</div>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{p.code}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 12 }}>{p.managerName ?? "—"}</td>
+                  <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 600 }}>
+                    {roleFilter
+                      ? Math.round(p.departmentHours[roleFilter] ?? 0)
+                      : Math.round(p.hoursToDate)}h
+                  </td>
+                  <td style={{ padding: "10px 14px", textAlign: "right", color: "var(--text-muted)" }}>{Math.round(p.sanctionedHours)}h</td>
+                  <td style={{ padding: "10px 14px", textAlign: "right", color: "var(--text-muted)" }}>{p.hourlyRate ? `$${p.hourlyRate}` : "—"}</td>
+                  <td style={{ padding: "10px 14px", textAlign: "right" }}>{fmtCurrency(p.contractedValue)}</td>
+                  <td style={{ padding: "10px 14px", textAlign: "right" }}>{fmtCurrency(p.allocatedValue)}</td>
+                  <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 600, color: "var(--ok)" }}>{fmtCurrency(p.billedToDate)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 

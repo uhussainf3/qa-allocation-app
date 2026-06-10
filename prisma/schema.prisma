@@ -83,6 +83,7 @@ model User {
   resourceRequestsAssigned ResourceRequest[] @relation("RequestAssignedTo")
   timesheets               Timesheet[]
   assignedTasks            Task[]            @relation("AssignedTasks")
+  leaveApprovals           LeaveApproval[]   @relation("LeaveApprovals")
 }
 
 // Division — top-level organisational unit (e.g. NetSuite, App Dev, ML/AI)
@@ -113,6 +114,7 @@ model Project {
   clientName      String?
   status          String   @default("ACTIVE")
   sanctionedHours Float    @default(0)
+  hourlyRate      Float?   @default(0)  // $ value per hour — used to compute billed amounts
   startDate       DateTime?
   endDate         DateTime?
   color           String   @default("#6366f1")
@@ -233,21 +235,42 @@ model Timesheet {
 }
 
 // Leave — type: PTO | SICK | TRAINING | PUBLIC_HOLIDAY | UNPAID
-//         status: PENDING | APPROVED | REJECTED
+//         status: PENDING | PM_APPROVED | APPROVED | REJECTED
 
 model Leave {
+  id             String   @id @default(cuid())
+  userId         String
+  type           String
+  startDate      DateTime
+  endDate        DateTime
+  reason         String?
+  status         String   @default("PENDING")  // PENDING | PM_APPROVED | APPROVED | REJECTED
+  approvedBy     String?
+  clientApproval String?  // client approval text received via email
+  backupPlan     String?  // backup plan entered by employee or managers
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  approvals LeaveApproval[]
+}
+
+// LeaveApproval — one record per approver per leave
+//   level 1 = Project Manager(s);  level 2 = Division Owner / Admin (final)
+//   status: PENDING | APPROVED | REJECTED
+
+model LeaveApproval {
   id         String   @id @default(cuid())
-  userId     String
-  type       String
-  startDate  DateTime
-  endDate    DateTime
-  reason     String?
-  status     String   @default("PENDING")
-  approvedBy String?
+  leaveId    String
+  approverId String
+  level      Int      // 1 = PM, 2 = Division Owner / Admin
+  status     String   @default("PENDING")  // PENDING | APPROVED | REJECTED
+  comment    String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leave    Leave @relation(fields: [leaveId], references: [id], onDelete: Cascade)
+  approver User  @relation("LeaveApprovals", fields: [approverId], references: [id])
 }
 
 model Skill {

@@ -228,7 +228,7 @@ export const getCachedAllAllocationsForProjects = unstable_cache(
         endDate:     true,
         hoursPerDay: true,
         userId:      true,
-        user:        { select: { name: true } },
+        user:        { select: { name: true, department: true } },
       },
     });
     return rows.map((a) => ({
@@ -238,6 +238,7 @@ export const getCachedAllAllocationsForProjects = unstable_cache(
       endDate:     a.endDate.toISOString(),
       userId:      a.userId,
       userName:    a.user.name,
+      department:  a.user.department,
     }));
   },
   ["allocations-for-projects"],

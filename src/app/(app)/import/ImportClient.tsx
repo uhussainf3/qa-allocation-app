@@ -1577,25 +1577,31 @@ function OverlapAlerts() {
         // Fetch allocations for current batch that have overlap notes
         const res  = await fetch(`/api/allocations/view?batchId=${current.id}`);
         const data = await res.json();
+        const allUsers: { id: string; name: string | null; email: string | null }[] = data.users ?? [];
         const flagged = (Array.isArray(data) ? data : (data.allocations ?? []))
           .filter((a: { notes?: string }) => a.notes?.includes("Overlap detected"));
         setItems(flagged.map((a: {
           id: string;
-          user?: { name?: string };
+          userId?: string;
+          user?: { name?: string | null; email?: string | null };
           project?: { name?: string };
           startDate: string;
           endDate: string;
           hoursPerDay: number;
           notes?: string;
-        }) => ({
-          id:            a.id,
-          employeeName:  a.user?.name    ?? "Unknown",
-          projectName:   a.project?.name ?? "Unknown",
-          startDate:     a.startDate,
-          endDate:       a.endDate,
-          allocationPct: Math.round((a.hoursPerDay / 8) * 100),
-          notes:         a.notes ?? null,
-        })));
+        }) => {
+          // user relation included by API; fall back to users array if not present
+          const userRecord = a.user ?? allUsers.find((u) => u.id === a.userId);
+          return {
+            id:            a.id,
+            employeeName:  userRecord?.name ?? userRecord?.email ?? "Unknown",
+            projectName:   a.project?.name ?? "Unknown",
+            startDate:     a.startDate,
+            endDate:       a.endDate,
+            allocationPct: Math.round((a.hoursPerDay / 8) * 100),
+            notes:         a.notes ?? null,
+          };
+        }));
       })
       .catch(() => {})
       .finally(() => setLoading(false));

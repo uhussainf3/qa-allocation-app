@@ -89,6 +89,16 @@ Claude reads this at the start of every session and updates it as features are c
 | 28 | Stale Allocations screen | ✅ Done | Two-section UI: Section A (within CSV range) + Section B (beyond CSV maxEnd); DELETE per row; ADMIN+DO only |
 | 29 | Overlap Alerts screen | ✅ Done | Tab in Import page showing current-batch allocations flagged with overlap notes (S-6) |
 | 30 | Import History — enriched skipped rows | ✅ Done | S-7/S-8/S-12 skipped rows stored in batch log with reason, employeeId, projectId, dates |
+| 31 | Unit tests — importUtils.ts | ✅ Done | 51 tests in src/lib/__tests__/importUtils.test.ts; vitest.config.mts with @/ alias; covers all 7 utility functions mapped to S-1 through S-13 |
+| 32 | Upload progress bar — real numbers | 📋 To Do | Weekly Upload + RM Migration: show step X of Y, live created/skipped counts per phase, % fill based on completed steps |
+| 33 | Allocation creation date | 📋 To Do | Surface createdAt field in Manage Allocations list as a sortable "Created" column and read-only field in the edit modal |
+| 34 | Projects — search bar + PM filter | ✅ Done | Search input filters by name/code; "All managers" dropdown filters by managerId; both combine with division filter on Projects page |
+| 35 | Project hourly rate ($/hr) + billed amounts | ✅ Done | Schema: Project.hourlyRate Float?; $/hour input in New/Edit Project modals; Executive Dashboard "Top 10 Projects by Hours-to-Date" panel shows Contracted Value (sanctioned×rate), Allocated Value (allocated×rate), Billed to Date (hoursToDate×rate) |
+| 36 | Bench — role tiles + +60 days view | ✅ Done | Role tiles (count per dept) on all 4 views; Total KPI tile on +30/+60 snapshot views; +60 days 4th tab; roleOptions from allUsers; benchUtils.ts extracted; benchUtils.test.ts (22 tests) |
+| 37 | Forecast — role/department filter + decimal rounding | ✅ Done | RoleFilter URL param component (RoleFilter.tsx); filters ALL page data by User.department; demand rounded to whole number; subtitle shows active role |
+| 38 | Leave multi-level approval workflow | ✅ Done | PM L1 → DO L2; clientApproval + backupPlan fields; leave hours deducted from project totals; leaveUtils.ts extracted; leaveUtils.test.ts (27 tests) |
+| 39 | Integration test — GET /api/leave response contract | ✅ Done | leaveApi.integration.test.ts (16 tests); mocks Prisma+auth; asserts flat approverName shape, projectNames, date serialization, 401 guard |
+| 40 | Bench role tiles — sum of bench % | ✅ Done | Each role tile now shows resource count + sum of onBenchPct for that role; buildRoleTiles updated; benchUtils.test.ts now 26 tests |
 
 ---
 

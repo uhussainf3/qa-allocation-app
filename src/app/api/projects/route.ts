@@ -10,11 +10,13 @@ const createSchema = z.object({
   description: z.string().optional(),
   clientName: z.string().optional(),
   sanctionedHours: z.number().min(0).default(0),
+  hourlyRate: z.number().min(0).optional().nullable(),
   startDate: z.string().optional().nullable(),
   endDate: z.string().optional().nullable(),
   color: z.string().default("#6366f1"),
   status: z.enum(["ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"]).default("ACTIVE"),
   managerId: z.string().optional().nullable(),
+  divisionId: z.string().optional().nullable(),
 });
 
 export async function GET() {

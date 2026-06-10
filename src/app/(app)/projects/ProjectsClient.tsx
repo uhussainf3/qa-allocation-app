@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { Role } from "@/types/enums";
 
@@ -21,16 +21,16 @@ type Task = Subtask & { subtasks: Subtask[] };
 type EngineerBreakdown = { userId: string; userName: string | null; hoursToDate: number; totalAllocated: number };
 type Project = {
   id: string; name: string; code: string; description: string | null;
-  clientName: string | null; status: string; sanctionedHours: number;
+  clientName: string | null; status: string; sanctionedHours: number; hourlyRate: number | null;
   startDate: string | null; endDate: string | null; color: string;
-  divisionId: string | null;
+  divisionId: string | null; managerId: string | null;
   consumedHours: number; allocatedHours: number; hoursToDate: number;
   engineerBreakdown: EngineerBreakdown[];
   tasks: { id: string; name: string; estimatedHours: number; subtasks: { id: string; name: string; estimatedHours: number }[] }[];
   _count: { allocations: number; hoursLogs: number };
 };
 
-type TeamMember   = { id: string; name: string | null };
+type TeamMember   = { id: string; name: string | null; role?: string; department?: string | null };
 type DivisionRef  = { id: string; name: string; code: string; color: string };
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -74,13 +74,15 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
   const canEdit = ["ADMIN", "DIVISION_OWNER", "PROJECT_MANAGER"].includes(currentUserRole);
 
   const [divisionFilter, setDivisionFilter] = useState("");
+  const [pmFilter,       setPmFilter]       = useState("");
+  const [searchQuery,    setSearchQuery]    = useState("");
   const [projects,       setProjects]       = useState<Project[]>(initialProjects);
   const [selected,      setSelected]      = useState<Project | null>(initialProjects[0] ?? null);
   const [activeTab,     setActiveTab]     = useState<"overview"|"tasks">("overview");
   const [showModal,     setShowModal]     = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [form,          setForm]          = useState({ name:"", code:"", clientName:"", sanctionedHours:0, color:COLORS[0], status:"ACTIVE", startDate:"", endDate:"", description:"" });
-  const [editForm,      setEditForm]      = useState({ name:"", clientName:"", sanctionedHours:0, color:COLORS[0], status:"ACTIVE", startDate:"", endDate:"", description:"" });
+  const [form,          setForm]          = useState({ name:"", code:"", clientName:"", sanctionedHours:0, hourlyRate:0, color:COLORS[0], status:"ACTIVE", startDate:"", endDate:"", description:"", divisionId:"", managerId:"" });
+  const [editForm,      setEditForm]      = useState({ name:"", clientName:"", sanctionedHours:0, hourlyRate:0, color:COLORS[0], status:"ACTIVE", startDate:"", endDate:"", description:"", divisionId:"", managerId:"" });
   const [saving,        setSaving]        = useState(false);
   const [editSaving,    setEditSaving]    = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -113,11 +115,13 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
     if (!selected) return;
     setEditForm({
       name: selected.name, clientName: selected.clientName ?? "",
-      sanctionedHours: selected.sanctionedHours, color: selected.color,
+      sanctionedHours: selected.sanctionedHours, hourlyRate: selected.hourlyRate ?? 0, color: selected.color,
       status: selected.status,
       startDate: selected.startDate?.slice(0,10) ?? "",
       endDate:   selected.endDate?.slice(0,10)   ?? "",
       description: selected.description ?? "",
+      divisionId: selected.divisionId ?? "",
+      managerId:  selected.managerId  ?? "",
     });
     setShowEditModal(true);
   }
@@ -129,7 +133,7 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
     try {
       const res = await fetch(`/api/projects/${selected.id}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...editForm, sanctionedHours: Number(editForm.sanctionedHours), startDate: editForm.startDate||null, endDate: editForm.endDate||null }),
+        body: JSON.stringify({ ...editForm, sanctionedHours: Number(editForm.sanctionedHours), hourlyRate: Number(editForm.hourlyRate), startDate: editForm.startDate||null, endDate: editForm.endDate||null, divisionId: editForm.divisionId||null, managerId: editForm.managerId||null }),
       });
       if (res.ok) { setShowEditModal(false); router.refresh(); }
     } finally { setEditSaving(false); }
@@ -138,7 +142,7 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault(); setSaving(true);
     try {
-      const res = await fetch("/api/projects", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({...form, sanctionedHours: Number(form.sanctionedHours)}) });
+      const res = await fetch("/api/projects", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({...form, sanctionedHours: Number(form.sanctionedHours), hourlyRate: Number(form.hourlyRate), divisionId: form.divisionId||null, managerId: form.managerId||null}) });
       if (res.ok) { setShowModal(false); router.refresh(); }
     } finally { setSaving(false); }
   }
@@ -204,6 +208,58 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
+
+  // Project managers — anyone who manages at least one project shows up as a filter option
+  const pmOptions = useMemo(() => {
+    const managerIds = new Set(projects.map((p) => p.managerId).filter(Boolean) as string[]);
+    return teamMembers
+      .filter((m) => managerIds.has(m.id))
+      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+  }, [projects, teamMembers]);
+
+  // Project manager candidates for the create/edit forms — anyone with the PROJECT_MANAGER role
+  const pmCandidates = useMemo(() => (
+    teamMembers
+      .filter((m) => m.role === "PROJECT_MANAGER")
+      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))
+  ), [teamMembers]);
+
+  // Visible projects — division, PM, and name/code search filters combined
+  const visibleProjects = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return projects.filter((p) => {
+      if (divisionFilter && p.divisionId !== divisionFilter) return false;
+      if (pmFilter       && p.managerId  !== pmFilter)       return false;
+      if (q && !p.name.toLowerCase().includes(q) && !p.code.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [projects, divisionFilter, pmFilter, searchQuery]);
+
+  // ── Department summary tiles — sums for the currently selected project only ──
+  const deptSummary = useMemo(() => {
+    if (!selected) return [];
+    const deptMap  = new Map<string, { hoursToDate: number; totalAllocated: number }>();
+    const userDept = new Map(teamMembers.map((m) => [m.id, m.department ?? null]));
+
+    for (const e of selected.engineerBreakdown) {
+      const dept = userDept.get(e.userId);
+      if (!dept) continue;
+      const existing = deptMap.get(dept) ?? { hoursToDate: 0, totalAllocated: 0 };
+      deptMap.set(dept, {
+        hoursToDate:    existing.hoursToDate    + e.hoursToDate,
+        totalAllocated: existing.totalAllocated + e.totalAllocated,
+      });
+    }
+
+    return [...deptMap.entries()]
+      .map(([dept, vals]) => ({
+        dept,
+        hoursToDate:    Math.round(vals.hoursToDate    * 10) / 10,
+        totalAllocated: Math.round(vals.totalAllocated * 10) / 10,
+      }))
+      .sort((a, b) => b.totalAllocated - a.totalAllocated);
+  }, [selected, teamMembers]);
+
   const proj       = selected;
   const remaining  = proj ? proj.sanctionedHours - proj.consumedHours : 0;
   const usedPct    = proj?.sanctionedHours ? Math.round(proj.consumedHours  / proj.sanctionedHours * 100) : 0;
@@ -216,9 +272,27 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
       <div className="page-head">
         <div>
           <h1 className="page-title">Projects</h1>
-          <div className="page-sub">{projects.length} projects</div>
+          <div className="page-sub">{visibleProjects.length} of {projects.length} projects</div>
         </div>
         <div className="page-actions">
+          <div className="search" style={{ width:220 }}>
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+              <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            <input
+              placeholder="Search project name or code…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ border:0, outline:0, flex:1, background:"transparent", fontSize:13 }}
+            />
+          </div>
+          {pmOptions.length > 0 && (
+            <select className="select-sm" value={pmFilter} onChange={(e) => setPmFilter(e.target.value)}>
+              <option value="">All managers</option>
+              {pmOptions.map((m) => <option key={m.id} value={m.id}>{m.name ?? "Unnamed"}</option>)}
+            </select>
+          )}
           {divisions.length > 0 && (
             <select className="select-sm" value={divisionFilter} onChange={(e) => setDivisionFilter(e.target.value)}>
               <option value="">All divisions</option>
@@ -229,24 +303,35 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
         </div>
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"240px 1fr", gap:16, height:"calc(100vh - 180px)" }}>
+      <div style={{ display:"grid", gridTemplateColumns:"320px 1fr", gap:16, height:"calc(100vh - 180px)" }}>
 
         {/* ── Project list ── */}
         <div className="card" style={{ overflow:"auto" }}>
-          {projects.filter((p) => !divisionFilter || p.divisionId === divisionFilter).map((p) => (
-            <div key={p.id} onClick={() => selectProject(p)} style={{
-              display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
+          {visibleProjects.length === 0 && (
+            <div style={{ padding:"24px 14px", textAlign:"center", color:"var(--text-muted)", fontSize:13 }}>
+              No projects match your filters.
+            </div>
+          )}
+          {visibleProjects.map((p) => (
+            <div key={p.id} onClick={() => selectProject(p)} title={p.name} style={{
+              display:"flex", alignItems:"flex-start", gap:10, padding:"10px 14px",
               cursor:"pointer", borderRadius:6,
               background: selected?.id === p.id ? "var(--accent-soft)" : "transparent",
             }}>
-              <span style={{ width:10, height:10, borderRadius:"50%", background:p.color, flexShrink:0 }} />
-              <div style={{ overflow:"hidden" }}>
-                <div style={{ fontWeight:500, fontSize:13, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{p.name}</div>
-                <div style={{ fontSize:11, color:"var(--text-muted)" }}>{p.code}</div>
+              <span style={{ width:10, height:10, borderRadius:"50%", background:p.color, flexShrink:0, marginTop:4 }} />
+              <div style={{ overflow:"hidden", minWidth:0, flex:1 }}>
+                <div style={{
+                  fontWeight:500, fontSize:13, lineHeight:1.35,
+                  display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical",
+                  overflow:"hidden", wordBreak:"break-word",
+                }}>{p.name}</div>
+                <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:5, flexWrap:"wrap" }}>
+                  <span style={{ fontSize:11, color:"var(--text-muted)" }}>{p.code}</span>
+                  <span className={`chip chip-${STATUS_COLORS[p.status]}`} style={{ fontSize:10 }}>
+                    {p.status.replace("_"," ")}
+                  </span>
+                </div>
               </div>
-              <span className={`chip chip-${STATUS_COLORS[p.status]}`} style={{ marginLeft:"auto", fontSize:10 }}>
-                {p.status.replace("_"," ")}
-              </span>
             </div>
           ))}
         </div>
@@ -322,6 +407,57 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
                     )}
                   </div>
                 </div>
+
+                {/* ── Department breakdown tiles ── */}
+                {deptSummary.length > 0 && (
+                  <div style={{ marginBottom:20 }}>
+                    <div style={{ fontSize:12, fontWeight:600, color:"var(--text-muted)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10 }}>
+                      By Role
+                    </div>
+                    <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                      {deptSummary.map(({ dept, hoursToDate, totalAllocated }) => (
+                        <div key={dept} style={{
+                          flex:"1 1 140px", maxWidth:200,
+                          padding:"10px 14px", borderRadius:8,
+                          border:"1px solid var(--border)",
+                          background:"var(--bg)",
+                        }}>
+                          <div style={{ fontSize:11, fontWeight:600, color:"var(--text-muted)", textTransform:"uppercase", letterSpacing:"0.04em", marginBottom:8, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                            {dept}
+                          </div>
+                          <div style={{ display:"flex", gap:16, marginBottom: totalAllocated > 0 ? 8 : 0 }}>
+                            <div>
+                              <div style={{ fontSize:10, color:"var(--text-muted)", marginBottom:1 }}>To Date</div>
+                              <div style={{ fontSize:16, fontWeight:700, fontFamily:"var(--mono)" }}>
+                                {Math.round(hoursToDate)}<span style={{ fontSize:10, fontWeight:400, marginLeft:1 }}>h</span>
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize:10, color:"var(--text-muted)", marginBottom:1 }}>Allocated</div>
+                              <div style={{ fontSize:16, fontWeight:700, fontFamily:"var(--mono)" }}>
+                                {Math.round(totalAllocated)}<span style={{ fontSize:10, fontWeight:400, marginLeft:1 }}>h</span>
+                              </div>
+                            </div>
+                          </div>
+                          {totalAllocated > 0 && (
+                            <>
+                              <div style={{ height:3, background:"var(--surface-2)", borderRadius:2 }}>
+                                <div style={{
+                                  height:3, borderRadius:2,
+                                  width:`${Math.min(Math.round(hoursToDate / totalAllocated * 100), 100)}%`,
+                                  background:"var(--accent)", transition:"width 0.3s",
+                                }} />
+                              </div>
+                              <div style={{ fontSize:10, color:"var(--text-muted)", marginTop:3 }}>
+                                {Math.round(hoursToDate / totalAllocated * 100)}% utilised
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {showBreakdown && proj.engineerBreakdown.length>0 && (
                   <div style={{ marginBottom:20 }}>
@@ -493,10 +629,28 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
                   <input type="number" min={0} value={editForm.sanctionedHours} onChange={(e) => setEditForm(s=>({...s,sanctionedHours:Number(e.target.value)}))} />
                 </label>
                 <label className="field">
+                  <span>$ / hour</span>
+                  <input type="number" min={0} step="0.01" placeholder="e.g. 35" value={editForm.hourlyRate} onChange={(e) => setEditForm(s=>({...s,hourlyRate:Number(e.target.value)}))} />
+                </label>
+                <label className="field">
                   <span>Status</span>
                   <select value={editForm.status} onChange={(e) => setEditForm(s=>({...s,status:e.target.value}))}>
                     <option value="ACTIVE">Active</option><option value="ON_HOLD">On Hold</option>
                     <option value="COMPLETED">Completed</option><option value="CANCELLED">Cancelled</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Division</span>
+                  <select value={editForm.divisionId} onChange={(e) => setEditForm(s=>({...s,divisionId:e.target.value}))}>
+                    <option value="">No division</option>
+                    {divisions.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.code})</option>)}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Project manager</span>
+                  <select value={editForm.managerId} onChange={(e) => setEditForm(s=>({...s,managerId:e.target.value}))}>
+                    <option value="">Unassigned</option>
+                    {pmCandidates.map((m) => <option key={m.id} value={m.id}>{m.name ?? "Unnamed"}</option>)}
                   </select>
                 </label>
                 <label className="field">
@@ -557,10 +711,28 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
                   <input type="number" min={0} value={form.sanctionedHours} onChange={(e) => setForm(s=>({...s,sanctionedHours:Number(e.target.value)}))} />
                 </label>
                 <label className="field">
+                  <span>$ / hour</span>
+                  <input type="number" min={0} step="0.01" placeholder="e.g. 35" value={form.hourlyRate} onChange={(e) => setForm(s=>({...s,hourlyRate:Number(e.target.value)}))} />
+                </label>
+                <label className="field">
                   <span>Status</span>
                   <select value={form.status} onChange={(e) => setForm(s=>({...s,status:e.target.value}))}>
                     <option value="ACTIVE">Active</option><option value="ON_HOLD">On Hold</option>
                     <option value="COMPLETED">Completed</option><option value="CANCELLED">Cancelled</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Division</span>
+                  <select value={form.divisionId} onChange={(e) => setForm(s=>({...s,divisionId:e.target.value}))}>
+                    <option value="">No division</option>
+                    {divisions.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.code})</option>)}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Project manager</span>
+                  <select value={form.managerId} onChange={(e) => setForm(s=>({...s,managerId:e.target.value}))}>
+                    <option value="">Unassigned</option>
+                    {pmCandidates.map((m) => <option key={m.id} value={m.id}>{m.name ?? "Unnamed"}</option>)}
                   </select>
                 </label>
                 <label className="field">
