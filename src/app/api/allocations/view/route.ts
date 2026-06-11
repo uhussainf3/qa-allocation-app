@@ -24,20 +24,23 @@ export async function GET(req: Request) {
   const to   = addWeeks(from, nWeeks);
 
   if (batchId) {
-    // Historical batch view — bypass cache, query directly
-    const [users, projects, holidays, batchAllocations] = await Promise.all([
-      getCachedActiveUsers(),
-      getCachedActiveProjects(),
-      getCachedPublicHolidays(),
-      prisma.allocation.findMany({
-        where: { batchId },
-        include: {
-          project: { select: { id: true, name: true, code: true, color: true } },
-          user:    { select: { id: true, name: true, email: true } },
-          task:    { select: { id: true, name: true } },
-        },
-      }),
-    ]);
+    // Historical batch view — bypass cache, query directly.
+    // Sequential, not Promise.all — the Neon connection pool here is
+    // configured with connection_limit=1, so issuing several Prisma
+    // queries concurrently just queues them up and times out waiting for
+    // a connection ("Timed out fetching a new connection from the
+    // connection pool ... connection limit: 1").
+    const users   = await getCachedActiveUsers();
+    const projects = await getCachedActiveProjects();
+    const holidays = await getCachedPublicHolidays();
+    const batchAllocations = await prisma.allocation.findMany({
+      where: { batchId },
+      include: {
+        project: { select: { id: true, name: true, code: true, color: true } },
+        user:    { select: { id: true, name: true, email: true } },
+        task:    { select: { id: true, name: true } },
+      },
+    });
     const allocations = batchAllocations.map((a) => ({
       ...a,
       startDate: a.startDate.toISOString(),
@@ -48,12 +51,16 @@ export async function GET(req: Request) {
     return NextResponse.json({ users, allocations, projects, holidays });
   }
 
-  const [users, allocations, projects, holidays] = await Promise.all([
-    getCachedActiveUsers(),
-    getCachedAllocationsInRange(from.toISOString(), to.toISOString()),
-    getCachedActiveProjects(),
-    getCachedPublicHolidays(),
-  ]);
+  // Sequential, not Promise.all — the Neon connection pool here is
+  // configured with connection_limit=1, so issuing several Prisma queries
+  // concurrently just queues them up and times out waiting for a
+  // connection ("Timed out fetching a new connection from the connection
+  // pool ... connection limit: 1"). Each of these is independently cached
+  // (60s TTL) so steady-state requests don't hit the DB at all.
+  const users       = await getCachedActiveUsers();
+  const allocations = await getCachedAllocationsInRange(from.toISOString(), to.toISOString());
+  const projects    = await getCachedActiveProjects();
+  const holidays    = await getCachedPublicHolidays();
 
   return NextResponse.json(
     { users, allocations, projects, holidays },

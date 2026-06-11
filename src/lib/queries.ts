@@ -65,20 +65,23 @@ export const getCachedActiveProjects = unstable_cache(
  */
 export const getCachedProjectsFull = unstable_cache(
   async () => {
-    const [projects, hoursConsumed] = await Promise.all([
-      prisma.project.findMany({
-        include: {
-          tasks: {
-            include: { subtasks: { orderBy: { order: "asc" } } },
-            where: { parentId: null },
-            orderBy: { order: "asc" },
-          },
-          _count: { select: { allocations: true, hoursLogs: true } },
+    // Sequential, not Promise.all — the Neon connection pool here is
+    // configured with connection_limit=1, so issuing both queries
+    // concurrently just queues them up and times out waiting for a
+    // connection ("Timed out fetching a new connection from the
+    // connection pool ... connection limit: 1").
+    const projects = await prisma.project.findMany({
+      include: {
+        tasks: {
+          include: { subtasks: { orderBy: { order: "asc" } } },
+          where: { parentId: null },
+          orderBy: { order: "asc" },
         },
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.hoursLog.groupBy({ by: ["projectId"], _sum: { hours: true } }),
-    ]);
+        _count: { select: { allocations: true, hoursLogs: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    const hoursConsumed = await prisma.hoursLog.groupBy({ by: ["projectId"], _sum: { hours: true } });
 
     return {
       projects: projects.map((p) => ({
