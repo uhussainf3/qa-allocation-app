@@ -36,20 +36,21 @@ export async function POST(req: Request) {
   const projectIds  = rows.map((r) => r.projectId);
   const codes       = projectIds.map((id) => `P-${id}`);
 
-  const [directors, pmUsers, existingProjects] = await Promise.all([
-    prisma.user.findMany({
-      where:  { externalId: { in: directorIds } },
-      select: { id: true, externalId: true },
-    }),
-    prisma.user.findMany({
-      where:  { isActive: true, role: { in: PM_ROLES } },
-      select: { id: true, name: true },
-    }),
-    prisma.project.findMany({
-      where:  { OR: [{ externalId: { in: projectIds } }, { code: { in: codes } }] },
-      select: { id: true, externalId: true, code: true, divisionId: true, startDate: true, endDate: true },
-    }),
-  ]);
+  // Sequential, not Promise.all — the Neon connection pool here is
+  // configured with connection_limit=1, so concurrent queries just queue
+  // up on the single connection and risk a pool-timeout error.
+  const directors = await prisma.user.findMany({
+    where:  { externalId: { in: directorIds } },
+    select: { id: true, externalId: true },
+  });
+  const pmUsers = await prisma.user.findMany({
+    where:  { isActive: true, role: { in: PM_ROLES } },
+    select: { id: true, name: true },
+  });
+  const existingProjects = await prisma.project.findMany({
+    where:  { OR: [{ externalId: { in: projectIds } }, { code: { in: codes } }] },
+    select: { id: true, externalId: true, code: true, divisionId: true, startDate: true, endDate: true },
+  });
 
   const divisions = directors.length
     ? await prisma.division.findMany({
@@ -97,15 +98,21 @@ export async function POST(req: Request) {
     }
     send({ type: "progress", phase: "Projects", done, total });
 
+    // Sequential, not Promise.all — the Neon connection pool here is
+    // configured with connection_limit=1, so issuing many updates
+    // concurrently just queues them up and times out waiting for a
+    // connection ("Timed out fetching a new connection from the
+    // connection pool ... connection limit: 1"). UPDATE_CHUNK_SIZE is
+    // kept purely to control how often progress events are sent.
     for (let i = 0; i < plan.projectsToUpdate.length; i += UPDATE_CHUNK_SIZE) {
       const chunk = plan.projectsToUpdate.slice(i, i + UPDATE_CHUNK_SIZE);
-      await Promise.all(
-        chunk.map(({ id, projectId, data }) =>
-          prisma.project.update({ where: { id }, data }).catch((e: unknown) => {
-            errors.push({ projectId, message: String(e) });
-          })
-        )
-      );
+      for (const { id, projectId, data } of chunk) {
+        try {
+          await prisma.project.update({ where: { id }, data });
+        } catch (e: unknown) {
+          errors.push({ projectId, message: String(e) });
+        }
+      }
       done += chunk.length;
       send({ type: "progress", phase: "Projects", done, total });
     }

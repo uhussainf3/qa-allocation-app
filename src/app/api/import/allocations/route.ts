@@ -83,18 +83,19 @@ export async function POST(req: Request) {
   if (!Array.isArray(rows) || rows.length === 0)  return err("rows must be a non-empty array");
 
   // ── Step 1: Pre-load lookup tables ─────────────────────────────────────────
+  // Sequential, not Promise.all — the Neon connection pool here is
+  // configured with connection_limit=1, so concurrent queries just queue
+  // up on the single connection and risk a pool-timeout error.
 
-  const [allUsers, allProjects, allDivisions] = await Promise.all([
-    prisma.user.findMany({
-      where:  { externalId: { not: null } },
-      select: { id: true, externalId: true },
-    }),
-    prisma.project.findMany({
-      where:  { externalId: { not: null } },
-      select: { id: true, externalId: true },
-    }),
-    prisma.division.findMany({ select: { id: true, ownerId: true } }),
-  ]);
+  const allUsers = await prisma.user.findMany({
+    where:  { externalId: { not: null } },
+    select: { id: true, externalId: true },
+  });
+  const allProjects = await prisma.project.findMany({
+    where:  { externalId: { not: null } },
+    select: { id: true, externalId: true },
+  });
+  const allDivisions = await prisma.division.findMany({ select: { id: true, ownerId: true } });
 
   const userMap         = new Map(allUsers.map((u)  => [u.externalId!, u.id]));
   const projectMap      = new Map(allProjects.map((p) => [p.externalId!, p.id]));
@@ -505,16 +506,22 @@ export async function POST(req: Request) {
       // Log save failed — import still succeeds
     }
 
-    // Step 14: Update managerId from Director ID column, in chunks
+    // Step 14: Update managerId from Director ID column, in chunks.
+    // Sequential, not Promise.all — the Neon connection pool here is
+    // configured with connection_limit=1, so issuing many updates
+    // concurrently just queues them up and times out waiting for a
+    // connection ("Timed out fetching a new connection from the
+    // connection pool ... connection limit: 1"). UPDATE_CHUNK_SIZE is
+    // kept purely to control how often progress events are sent.
     for (let i = 0; i < managerUpdates.length; i += UPDATE_CHUNK_SIZE) {
       const chunk = managerUpdates.slice(i, i + UPDATE_CHUNK_SIZE);
-      await Promise.all(
-        chunk.map(({ userId, managerUserId }) =>
-          prisma.user.update({ where: { id: userId }, data: { managerId: managerUserId } }).catch(() => {
-            /* non-critical */
-          })
-        )
-      );
+      for (const { userId, managerUserId } of chunk) {
+        try {
+          await prisma.user.update({ where: { id: userId }, data: { managerId: managerUserId } });
+        } catch {
+          /* non-critical */
+        }
+      }
       done += chunk.length;
       send({ type: "progress", phase: "Allocations", done, total });
     }

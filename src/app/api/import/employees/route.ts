@@ -37,24 +37,25 @@ export async function POST(req: Request) {
   const directorExtIds = [...new Set(rows.map((r) => r.dominantDirectorId).filter((d): d is string => !!d))];
   const positions = [...new Set(rows.map((r) => r.position).filter((p): p is string => !!p))];
 
-  const [existingByExtId, existingByEmail, directors, existingJobTitles] = await Promise.all([
-    prisma.user.findMany({
-      where: { externalId: { in: fomsIds } },
-      select: { id: true, role: true, divisionId: true, managerId: true, externalId: true },
-    }),
-    prisma.user.findMany({
-      where: { email: { in: emails } },
-      select: { id: true, role: true, divisionId: true, managerId: true, externalId: true, email: true },
-    }),
-    prisma.user.findMany({
-      where: { externalId: { in: directorExtIds } },
-      select: { id: true, externalId: true },
-    }),
-    prisma.jobTitle.findMany({
-      where: { name: { in: positions } },
-      select: { name: true },
-    }),
-  ]);
+  // Sequential, not Promise.all — the Neon connection pool here is
+  // configured with connection_limit=1, so concurrent queries just queue
+  // up on the single connection and risk a pool-timeout error.
+  const existingByExtId = await prisma.user.findMany({
+    where: { externalId: { in: fomsIds } },
+    select: { id: true, role: true, divisionId: true, managerId: true, externalId: true },
+  });
+  const existingByEmail = await prisma.user.findMany({
+    where: { email: { in: emails } },
+    select: { id: true, role: true, divisionId: true, managerId: true, externalId: true, email: true },
+  });
+  const directors = await prisma.user.findMany({
+    where: { externalId: { in: directorExtIds } },
+    select: { id: true, externalId: true },
+  });
+  const existingJobTitles = await prisma.jobTitle.findMany({
+    where: { name: { in: positions } },
+    select: { name: true },
+  });
 
   const divisions = directors.length
     ? await prisma.division.findMany({
@@ -108,15 +109,21 @@ export async function POST(req: Request) {
     }
     send({ type: "progress", phase: "Employees", done, total });
 
+    // Sequential, not Promise.all — the Neon connection pool here is
+    // configured with connection_limit=1, so issuing many updates
+    // concurrently just queues them up and times out waiting for a
+    // connection ("Timed out fetching a new connection from the
+    // connection pool ... connection limit: 1"). UPDATE_CHUNK_SIZE is
+    // kept purely to control how often progress events are sent.
     for (let i = 0; i < plan.usersToUpdate.length; i += UPDATE_CHUNK_SIZE) {
       const chunk = plan.usersToUpdate.slice(i, i + UPDATE_CHUNK_SIZE);
-      await Promise.all(
-        chunk.map(({ id, fomsId, data }) =>
-          prisma.user.update({ where: { id }, data }).catch((e: unknown) => {
-            errors.push({ fomsId, message: String(e) });
-          })
-        )
-      );
+      for (const { id, fomsId, data } of chunk) {
+        try {
+          await prisma.user.update({ where: { id }, data });
+        } catch (e: unknown) {
+          errors.push({ fomsId, message: String(e) });
+        }
+      }
       done += chunk.length;
       send({ type: "progress", phase: "Employees", done, total });
     }
