@@ -4,11 +4,14 @@ import { prisma } from "@/lib/prisma";
 export default async function SkillsPage() {
   await auth();
 
-  const [users, skills, userSkills] = await Promise.all([
-    prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.skill.findMany({ orderBy: { name: "asc" } }),
-    prisma.userSkill.findMany({ include: { skill: true } }),
-  ]);
+  // Sequential, not Promise.all — the Neon connection pool here is
+  // configured with connection_limit=1, so issuing several Prisma queries
+  // concurrently just queues them up and times out waiting for a
+  // connection ("Timed out fetching a new connection from the connection
+  // pool ... connection limit: 1").
+  const users      = await prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true }, orderBy: { name: "asc" } });
+  const skills     = await prisma.skill.findMany({ orderBy: { name: "asc" } });
+  const userSkills = await prisma.userSkill.findMany({ include: { skill: true } });
 
   const matrix: Record<string, Record<string, number>> = {};
   users.forEach((u) => { matrix[u.id] = {}; });

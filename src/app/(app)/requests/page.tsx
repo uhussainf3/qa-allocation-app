@@ -7,19 +7,24 @@ export default async function RequestsPage() {
   const session = await auth();
   const canSeeAll = ["ADMIN", "PROJECT_MANAGER"].includes(session!.user.role);
 
-  const [requests, projects, users] = await Promise.all([
-    prisma.resourceRequest.findMany({
-      where: canSeeAll ? {} : { requestedById: session!.user.id },
-      include: {
-        project: { select: { id: true, name: true, code: true } },
-        requestedBy: { select: { id: true, name: true } },
-        assignedTo: { select: { id: true, name: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.project.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true, code: true } }),
-    canSeeAll ? prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }) : Promise.resolve([]),
-  ]);
+  // Sequential, not Promise.all — the Neon connection pool here is
+  // configured with connection_limit=1, so issuing several Prisma queries
+  // concurrently just queues them up and times out waiting for a
+  // connection ("Timed out fetching a new connection from the connection
+  // pool ... connection limit: 1").
+  const requests = await prisma.resourceRequest.findMany({
+    where: canSeeAll ? {} : { requestedById: session!.user.id },
+    include: {
+      project: { select: { id: true, name: true, code: true } },
+      requestedBy: { select: { id: true, name: true } },
+      assignedTo: { select: { id: true, name: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  const projects = await prisma.project.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true, code: true } });
+  const users = canSeeAll
+    ? await prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } })
+    : [];
 
   return (
     <RequestsClient

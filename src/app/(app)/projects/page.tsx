@@ -14,19 +14,22 @@ import type { Role } from "@/types/enums";
 export default async function ProjectsPage() {
   const session = await auth();
 
-  const [{ projects, hoursConsumed }, allocations, rawHolidays, teamMembers, divisions, approvedLeaves] =
-    await Promise.all([
-      getCachedProjectsFull(),
-      getCachedAllAllocationsForProjects(),
-      getCachedPublicHolidays(),
-      getCachedSimpleUsers(),
-      getCachedDivisions(),
-      // Approved leaves — used to deduct hours from project totals
-      prisma.leave.findMany({
-        where:  { status: "APPROVED" },
-        select: { userId: true, startDate: true, endDate: true },
-      }),
-    ]);
+  // Sequential, not Promise.all — the Neon connection pool here is
+  // configured with connection_limit=1, so issuing several Prisma queries
+  // concurrently just queues them up and times out waiting for a
+  // connection ("Timed out fetching a new connection from the connection
+  // pool ... connection limit: 1"). Each cached call has its own 60s TTL so
+  // steady-state requests don't hit the DB at all.
+  const { projects, hoursConsumed } = await getCachedProjectsFull();
+  const allocations = await getCachedAllAllocationsForProjects();
+  const rawHolidays = await getCachedPublicHolidays();
+  const teamMembers = await getCachedSimpleUsers();
+  const divisions   = await getCachedDivisions();
+  // Approved leaves — used to deduct hours from project totals
+  const approvedLeaves = await prisma.leave.findMany({
+    where:  { status: "APPROVED" },
+    select: { userId: true, startDate: true, endDate: true },
+  });
 
   const holidays = new Set(rawHolidays.map((h) => h.date));
 

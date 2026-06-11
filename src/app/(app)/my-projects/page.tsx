@@ -40,10 +40,13 @@ export default async function MyProjectsPage() {
     orderBy: { name: "asc" },
   });
 
-  const [allUsers, divisions] = await Promise.all([
-    getCachedActiveUsers(),
-    getCachedDivisions(),
-  ]);
+  // Sequential, not Promise.all — the Neon connection pool here is
+  // configured with connection_limit=1, so issuing several Prisma queries
+  // concurrently just queues them up and times out waiting for a
+  // connection ("Timed out fetching a new connection from the connection
+  // pool ... connection limit: 1").
+  const allUsers  = await getCachedActiveUsers();
+  const divisions = await getCachedDivisions();
 
   // PM options for admin's PM filter dropdown
   const pmUsers = allUsers.filter((u) =>

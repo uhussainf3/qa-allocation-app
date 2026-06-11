@@ -8,11 +8,15 @@ export default async function ConflictsPage() {
   const weekEnd = new Date(weeks[weeks.length - 1]);
   weekEnd.setDate(weekEnd.getDate() + 7);
 
-  const [users, rawAllocations, rawHolidays] = await Promise.all([
-    getCachedSimpleUsers(),
-    getCachedConflictAllocations(weeks[0].toISOString(), weekEnd.toISOString()),
-    getCachedPublicHolidays(),
-  ]);
+  // Sequential, not Promise.all — the Neon connection pool here is
+  // configured with connection_limit=1, so issuing several Prisma queries
+  // concurrently just queues them up and times out waiting for a
+  // connection ("Timed out fetching a new connection from the connection
+  // pool ... connection limit: 1"). Each of these is independently cached
+  // (60s TTL) so steady-state requests don't hit the DB at all.
+  const users          = await getCachedSimpleUsers();
+  const rawAllocations = await getCachedConflictAllocations(weeks[0].toISOString(), weekEnd.toISOString());
+  const rawHolidays    = await getCachedPublicHolidays();
 
   // Convert ISO strings back to Date objects for server-side calculations
   const allocations = rawAllocations.map((a) => ({ ...a, startDate: new Date(a.startDate), endDate: new Date(a.endDate) }));

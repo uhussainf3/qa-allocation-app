@@ -20,13 +20,17 @@ export default async function CapacityPage({
   const fromISO = weeks[0].toISOString();
   const toISO   = weekEnd.toISOString();
 
-  const [allUsers, rawAllocations, rawLeaves, rawHolidays, divisions] = await Promise.all([
-    getCachedSimpleUsers(),
-    getCachedAllocationsMinimal(fromISO, toISO),
-    getCachedApprovedLeaves(fromISO, toISO),
-    getCachedPublicHolidays(),
-    getCachedDivisions(),
-  ]);
+  // Sequential, not Promise.all — the Neon connection pool here is
+  // configured with connection_limit=1, so issuing several Prisma queries
+  // concurrently just queues them up and times out waiting for a
+  // connection ("Timed out fetching a new connection from the connection
+  // pool ... connection limit: 1"). Each of these is independently cached
+  // (60s TTL) so steady-state requests don't hit the DB at all.
+  const allUsers      = await getCachedSimpleUsers();
+  const rawAllocations = await getCachedAllocationsMinimal(fromISO, toISO);
+  const rawLeaves     = await getCachedApprovedLeaves(fromISO, toISO);
+  const rawHolidays   = await getCachedPublicHolidays();
+  const divisions     = await getCachedDivisions();
 
   // Derive unique departments before filtering
   const departments = [...new Set(allUsers.map((u) => u.department).filter(Boolean) as string[])].sort();

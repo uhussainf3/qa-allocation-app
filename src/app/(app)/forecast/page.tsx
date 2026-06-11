@@ -17,12 +17,16 @@ export default async function ForecastPage({
   const weekEnd = new Date(weeks90[weeks90.length - 1]);
   weekEnd.setDate(weekEnd.getDate() + 7);
 
-  const [allUsers, rawAllocations, rawHolidays, divisions] = await Promise.all([
-    getCachedSimpleUsers(),
-    getCachedAllocationsMinimal(weeks90[0].toISOString(), weekEnd.toISOString()),
-    getCachedPublicHolidays(),
-    getCachedDivisions(),
-  ]);
+  // Sequential, not Promise.all — the Neon connection pool here is
+  // configured with connection_limit=1, so issuing several Prisma queries
+  // concurrently just queues them up and times out waiting for a
+  // connection ("Timed out fetching a new connection from the connection
+  // pool ... connection limit: 1"). Each of these is independently cached
+  // (60s TTL) so steady-state requests don't hit the DB at all.
+  const allUsers       = await getCachedSimpleUsers();
+  const rawAllocations = await getCachedAllocationsMinimal(weeks90[0].toISOString(), weekEnd.toISOString());
+  const rawHolidays    = await getCachedPublicHolidays();
+  const divisions      = await getCachedDivisions();
 
   // Unique departments for RoleFilter dropdown (from all users, unfiltered)
   const departments = [...new Set(allUsers.flatMap((u) => u.department ? [u.department] : []))].sort();

@@ -5,11 +5,15 @@ import type { Role, JobTitle } from "@/types/enums";
 
 export default async function AllocationListPage() {
   const session = await auth();
-  const [allocations, divisions, allUsers] = await Promise.all([
-    getCachedAllAllocationsList(),
-    getCachedDivisions(),
-    getCachedActiveUsers(),
-  ]);
+  // Sequential, not Promise.all — the Neon connection pool here is
+  // configured with connection_limit=1, so issuing several Prisma queries
+  // concurrently just queues them up and times out waiting for a
+  // connection ("Timed out fetching a new connection from the connection
+  // pool ... connection limit: 1"). Each of these is independently cached
+  // (60s TTL) so steady-state requests don't hit the DB at all.
+  const allocations = await getCachedAllAllocationsList();
+  const divisions   = await getCachedDivisions();
+  const allUsers    = await getCachedActiveUsers();
 
   const projectManagers = allUsers
     .filter((u) => (u.role === "PROJECT_MANAGER" || u.role === "DIVISION_OWNER") && u.divisionId)

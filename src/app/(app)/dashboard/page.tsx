@@ -16,97 +16,90 @@ export default async function DashboardPage() {
   today.setHours(0, 0, 0, 0);
   const todayISO = today.toISOString();
 
-  // ── Fetch everything in one big parallel shot ──────────────────────────────
-  const [
-    divisions,
-    allUsers,
-    activeAllocations,
-    projects,
-    openLeaves,
-    pipeline,
-    recentAllocations,
-    billingProjects,
-    allProjectAllocations,
-    rawHolidays,
-  ] = await Promise.all([
-    // Divisions with counts
-    prisma.division.findMany({
-      include: {
-        owner:    { select: { id: true, name: true } },
-        _count:   { select: { members: true, projects: true } },
-      },
-      orderBy: { name: "asc" },
-    }),
+  // ── Fetch everything sequentially ───────────────────────────────────────────
+  // Sequential, not Promise.all — the Neon connection pool here is
+  // configured with connection_limit=1, so issuing many Prisma queries
+  // concurrently just queues them up and times out waiting for a
+  // connection ("Timed out fetching a new connection from the connection
+  // pool ... connection limit: 1").
 
-    // Active users (excluding VP job title)
-    prisma.user.findMany({
-      where: {
-        isActive: true,
-        OR: [{ jobTitle: null }, { jobTitle: { not: "VP" } }],
-      },
-      select:  { id: true, name: true, email: true, role: true, jobTitle: true, capacity: true, divisionId: true },
-      orderBy: { name: "asc" },
-    }),
+  // Divisions with counts
+  const divisions = await prisma.division.findMany({
+    include: {
+      owner:    { select: { id: true, name: true } },
+      _count:   { select: { members: true, projects: true } },
+    },
+    orderBy: { name: "asc" },
+  });
 
-    // Today's allocations
-    prisma.allocation.findMany({
-      where:   { startDate: { lte: today }, endDate: { gte: today } },
-      select:  { userId: true, hoursPerDay: true, projectId: true, endDate: true,
-                  project: { select: { id: true, name: true, divisionId: true } } },
-    }),
+  // Active users (excluding VP job title)
+  const allUsers = await prisma.user.findMany({
+    where: {
+      isActive: true,
+      OR: [{ jobTitle: null }, { jobTitle: { not: "VP" } }],
+    },
+    select:  { id: true, name: true, email: true, role: true, jobTitle: true, capacity: true, divisionId: true },
+    orderBy: { name: "asc" },
+  });
 
-    // Active projects
-    prisma.project.findMany({
-      where:   { status: "ACTIVE" },
-      select:  { id: true, name: true, code: true, color: true, divisionId: true, sanctionedHours: true,
-                  _count: { select: { allocations: true, tasks: true } } },
-      orderBy: { name: "asc" },
-    }),
+  // Today's allocations
+  const activeAllocations = await prisma.allocation.findMany({
+    where:   { startDate: { lte: today }, endDate: { gte: today } },
+    select:  { userId: true, hoursPerDay: true, projectId: true, endDate: true,
+                project: { select: { id: true, name: true, divisionId: true } } },
+  });
 
-    // Pending leaves
-    prisma.leave.findMany({
-      where:   { status: "PENDING" },
-      select:  { id: true, userId: true, type: true, startDate: true, endDate: true,
-                  user: { select: { name: true, divisionId: true } } },
-    }),
+  // Active projects
+  const projects = await prisma.project.findMany({
+    where:   { status: "ACTIVE" },
+    select:  { id: true, name: true, code: true, color: true, divisionId: true, sanctionedHours: true,
+                _count: { select: { allocations: true, tasks: true } } },
+    orderBy: { name: "asc" },
+  });
 
-    // Pipeline opportunities
-    prisma.pipeline.findMany({
-      where:   { status: { notIn: ["WON", "LOST"] } },
-      select:  { id: true, name: true, status: true, probability: true, dealSize: true,
-                  requiredHeadcount: true, hoursPerWeek: true, expectedStartDate: true },
-      orderBy: { probability: "desc" },
-    }),
+  // Pending leaves
+  const openLeaves = await prisma.leave.findMany({
+    where:   { status: "PENDING" },
+    select:  { id: true, userId: true, type: true, startDate: true, endDate: true,
+                user: { select: { name: true, divisionId: true } } },
+  });
 
-    // Recent allocations ending soon (next 14 days)
-    prisma.allocation.findMany({
-      where: {
-        endDate: { gte: today, lte: new Date(today.getTime() + 14 * 86400000) },
-      },
-      select: {
-        userId: true, endDate: true,
-        user:    { select: { name: true, divisionId: true } },
-        project: { select: { name: true } },
-      },
-      orderBy: { endDate: "asc" },
-      take: 20,
-    }),
+  // Pipeline opportunities
+  const pipeline = await prisma.pipeline.findMany({
+    where:   { status: { notIn: ["WON", "LOST"] } },
+    select:  { id: true, name: true, status: true, probability: true, dealSize: true,
+                requiredHeadcount: true, hoursPerWeek: true, expectedStartDate: true },
+    orderBy: { probability: "desc" },
+  });
 
-    // All projects with billing fields — used to compute Top Projects by Hours-to-Date
-    prisma.project.findMany({
-      select: {
-        id: true, name: true, code: true, color: true, status: true,
-        divisionId: true, sanctionedHours: true, hourlyRate: true,
-        manager: { select: { name: true } },
-      },
-    }),
+  // Recent allocations ending soon (next 14 days)
+  const recentAllocations = await prisma.allocation.findMany({
+    where: {
+      endDate: { gte: today, lte: new Date(today.getTime() + 14 * 86400000) },
+    },
+    select: {
+      userId: true, endDate: true,
+      user:    { select: { name: true, divisionId: true } },
+      project: { select: { name: true } },
+    },
+    orderBy: { endDate: "asc" },
+    take: 20,
+  });
 
-    // All allocations (date ranges) — used to compute hours-to-date per project
-    getCachedAllAllocationsForProjects(),
+  // All projects with billing fields — used to compute Top Projects by Hours-to-Date
+  const billingProjects = await prisma.project.findMany({
+    select: {
+      id: true, name: true, code: true, color: true, status: true,
+      divisionId: true, sanctionedHours: true, hourlyRate: true,
+      manager: { select: { name: true } },
+    },
+  });
 
-    // Public holidays — needed for working-day calculations
-    getCachedPublicHolidays(),
-  ]);
+  // All allocations (date ranges) — used to compute hours-to-date per project
+  const allProjectAllocations = await getCachedAllAllocationsForProjects();
+
+  // Public holidays — needed for working-day calculations
+  const rawHolidays = await getCachedPublicHolidays();
 
   const holidays = new Set(rawHolidays.map((h) => h.date));
 

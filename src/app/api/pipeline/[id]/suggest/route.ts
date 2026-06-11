@@ -45,20 +45,23 @@ export async function GET(
   }
   const totalWeeks = totalWorkingDays / 5;
 
-  const [users, allocations] = await Promise.all([
-    prisma.user.findMany({
-      where:   { isActive: true },
-      select:  { id: true, name: true, email: true, capacity: true, role: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.allocation.findMany({
-      where: {
-        startDate: { lt: rangeEnd   },
-        endDate:   { gte: rangeStart },
-      },
-      select: { userId: true, startDate: true, endDate: true, hoursPerDay: true },
-    }),
-  ]);
+  // Sequential, not Promise.all — the Neon connection pool here is
+  // configured with connection_limit=1, so issuing several Prisma queries
+  // concurrently just queues them up and times out waiting for a
+  // connection ("Timed out fetching a new connection from the connection
+  // pool ... connection limit: 1").
+  const users = await prisma.user.findMany({
+    where:   { isActive: true },
+    select:  { id: true, name: true, email: true, capacity: true, role: true },
+    orderBy: { name: "asc" },
+  });
+  const allocations = await prisma.allocation.findMany({
+    where: {
+      startDate: { lt: rangeEnd   },
+      endDate:   { gte: rangeStart },
+    },
+    select: { userId: true, startDate: true, endDate: true, hoursPerDay: true },
+  });
 
   const suggestions = users.map((u) => {
     const userAllocs = allocations.filter((a) => a.userId === u.id);

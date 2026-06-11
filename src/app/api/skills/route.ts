@@ -13,12 +13,15 @@ export async function GET() {
   const session = await auth();
   if (!session) return unauthorized();
 
-  const [skills, userSkills] = await Promise.all([
-    prisma.skill.findMany({ orderBy: { name: "asc" } }),
-    prisma.userSkill.findMany({
-      include: { user: { select: { id: true, name: true, email: true } }, skill: true },
-    }),
-  ]);
+  // Sequential, not Promise.all — the Neon connection pool here is
+  // configured with connection_limit=1, so issuing several Prisma queries
+  // concurrently just queues them up and times out waiting for a
+  // connection ("Timed out fetching a new connection from the connection
+  // pool ... connection limit: 1").
+  const skills = await prisma.skill.findMany({ orderBy: { name: "asc" } });
+  const userSkills = await prisma.userSkill.findMany({
+    include: { user: { select: { id: true, name: true, email: true } }, skill: true },
+  });
 
   return ok({ skills, userSkills });
 }

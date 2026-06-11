@@ -16,24 +16,27 @@ export default async function BenchPage() {
   const day60 = new Date(today);
   day60.setUTCDate(today.getUTCDate() + 60);
 
-  const [allActiveUsers, allocToday, alloc30, alloc60, divisions, projects] = await Promise.all([
-    getCachedSimpleUsers(),
-    prisma.allocation.findMany({
-      where:   { startDate: { lte: today }, endDate: { gte: today } },
-      include: { project: { select: { id: true, name: true, color: true, managerId: true } } },
-      orderBy: { endDate: "asc" },
-    }),
-    prisma.allocation.findMany({
-      where:  { startDate: { lte: day30 }, endDate: { gte: day30 } },
-      select: { userId: true, hoursPerDay: true },
-    }),
-    prisma.allocation.findMany({
-      where:  { startDate: { lte: day60 }, endDate: { gte: day60 } },
-      select: { userId: true, hoursPerDay: true },
-    }),
-    getCachedDivisions(),
-    getCachedActiveProjects(),
-  ]);
+  // Sequential, not Promise.all — the Neon connection pool here is
+  // configured with connection_limit=1, so issuing several Prisma queries
+  // concurrently just queues them up and times out waiting for a
+  // connection ("Timed out fetching a new connection from the connection
+  // pool ... connection limit: 1").
+  const allActiveUsers = await getCachedSimpleUsers();
+  const allocToday = await prisma.allocation.findMany({
+    where:   { startDate: { lte: today }, endDate: { gte: today } },
+    include: { project: { select: { id: true, name: true, color: true, managerId: true } } },
+    orderBy: { endDate: "asc" },
+  });
+  const alloc30 = await prisma.allocation.findMany({
+    where:  { startDate: { lte: day30 }, endDate: { gte: day30 } },
+    select: { userId: true, hoursPerDay: true },
+  });
+  const alloc60 = await prisma.allocation.findMany({
+    where:  { startDate: { lte: day60 }, endDate: { gte: day60 } },
+    select: { userId: true, hoursPerDay: true },
+  });
+  const divisions = await getCachedDivisions();
+  const projects  = await getCachedActiveProjects();
 
   // Exclude onshore resources from bench entirely
   const users = allActiveUsers.filter((u) => !u.isOnshore);
