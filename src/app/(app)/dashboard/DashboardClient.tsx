@@ -75,13 +75,6 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-function fmtCurrency(n: number | null | undefined) {
-  if (n == null) return "—";
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000)     return `$${(n / 1_000).toFixed(1)}k`;
-  return `$${n.toFixed(0)}`;
-}
-
 function utilColor(pct: number) {
   if (pct >= 90) return "#ef4444";
   if (pct >= 70) return "var(--ok)";
@@ -265,11 +258,6 @@ export function DashboardClient({
                 <th style={{ textAlign: "left",  padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Project</th>
                 <th style={{ textAlign: "left",  padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Manager</th>
                 <th style={{ textAlign: "right", padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Hours to Date</th>
-                <th style={{ textAlign: "right", padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Sanctioned</th>
-                <th style={{ textAlign: "right", padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>$ / hr</th>
-                <th style={{ textAlign: "right", padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Contracted Value</th>
-                <th style={{ textAlign: "right", padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Allocated Value</th>
-                <th style={{ textAlign: "right", padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Billed to Date</th>
               </tr>
             </thead>
             <tbody>
@@ -290,11 +278,6 @@ export function DashboardClient({
                       ? Math.round(p.departmentHours[roleFilter] ?? 0)
                       : Math.round(p.hoursToDate)}h
                   </td>
-                  <td style={{ padding: "10px 14px", textAlign: "right", color: "var(--text-muted)" }}>{Math.round(p.sanctionedHours)}h</td>
-                  <td style={{ padding: "10px 14px", textAlign: "right", color: "var(--text-muted)" }}>{p.hourlyRate ? `$${p.hourlyRate}` : "—"}</td>
-                  <td style={{ padding: "10px 14px", textAlign: "right" }}>{fmtCurrency(p.contractedValue)}</td>
-                  <td style={{ padding: "10px 14px", textAlign: "right" }}>{fmtCurrency(p.allocatedValue)}</td>
-                  <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 600, color: "var(--ok)" }}>{fmtCurrency(p.billedToDate)}</td>
                 </tr>
               ))}
             </tbody>
