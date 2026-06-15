@@ -39,7 +39,7 @@ export default async function DashboardPage() {
       isActive: true,
       OR: [{ jobTitle: null }, { jobTitle: { not: "VP" } }],
     },
-    select:  { id: true, name: true, email: true, role: true, jobTitle: true, capacity: true, divisionId: true },
+    select:  { id: true, name: true, email: true, role: true, jobTitle: true, capacity: true, divisionId: true, department: true },
     orderBy: { name: "asc" },
   });
 
@@ -62,7 +62,7 @@ export default async function DashboardPage() {
   const openLeaves = await prisma.leave.findMany({
     where:   { status: "PENDING" },
     select:  { id: true, userId: true, type: true, startDate: true, endDate: true,
-                user: { select: { name: true, divisionId: true } } },
+                user: { select: { name: true, divisionId: true, department: true } } },
   });
 
   // Pipeline opportunities
@@ -80,7 +80,7 @@ export default async function DashboardPage() {
     },
     select: {
       userId: true, endDate: true,
-      user:    { select: { name: true, divisionId: true } },
+      user:    { select: { name: true, divisionId: true, department: true } },
       project: { select: { name: true } },
     },
     orderBy: { endDate: "asc" },
@@ -116,15 +116,6 @@ export default async function DashboardPage() {
     projectCount: d._count.projects,
   }));
 
-  const totalCapacity     = allUsers.reduce((s, u) => s + u.capacity / 5, 0); // daily
-  const allocatedH        = activeAllocations.reduce((s, a) => s + a.hoursPerDay, 0);
-  const utilPct           = totalCapacity > 0 ? Math.round((allocatedH / totalCapacity) * 100) : 0;
-  const benchCount        = allUsers.filter((u) => {
-    const myH = activeAllocations.filter((a) => a.userId === u.id).reduce((s, a) => s + a.hoursPerDay, 0);
-    const cap  = u.capacity / 5;
-    return cap > 0 && myH < cap;
-  }).length;
-
   // Per-division utilisation
   const divStats = serialisedDivisions.map((d) => {
     const members = allUsers.filter((u) => u.divisionId === d.id);
@@ -141,6 +132,8 @@ export default async function DashboardPage() {
   const allocatedHoursMap: Record<string, number>                  = {};
   // deptHoursMap[projectId][department] = hoursToDate contributed by that dept
   const deptHoursMap: Record<string, Record<string, number>>       = {};
+  // deptAllocatedMap[projectId][department] = total allocated hours contributed by that dept
+  const deptAllocatedMap: Record<string, Record<string, number>>   = {};
   const departmentSet = new Set<string>();
 
   for (const a of allProjectAllocations) {
@@ -148,7 +141,8 @@ export default async function DashboardPage() {
     const end   = new Date(a.endDate);
 
     const totalDays = totalWorkingDays(start, end, holidays);
-    allocatedHoursMap[a.projectId] = (allocatedHoursMap[a.projectId] ?? 0) + Math.round(totalDays * a.hoursPerDay * 10) / 10;
+    const allocHrs  = Math.round(totalDays * a.hoursPerDay * 10) / 10;
+    allocatedHoursMap[a.projectId] = (allocatedHoursMap[a.projectId] ?? 0) + allocHrs;
 
     const effectiveEnd = end < today ? end : today;
     const toDateDays   = start > today ? 0 : totalWorkingDays(start, effectiveEnd, holidays);
@@ -161,6 +155,10 @@ export default async function DashboardPage() {
       if (!deptHoursMap[a.projectId]) deptHoursMap[a.projectId] = {};
       deptHoursMap[a.projectId][a.department] =
         (deptHoursMap[a.projectId][a.department] ?? 0) + toDateHrs;
+
+      if (!deptAllocatedMap[a.projectId]) deptAllocatedMap[a.projectId] = {};
+      deptAllocatedMap[a.projectId][a.department] =
+        (deptAllocatedMap[a.projectId][a.department] ?? 0) + allocHrs;
     }
   }
 
@@ -179,6 +177,7 @@ export default async function DashboardPage() {
         allocatedValue:  Math.round(allocatedHours    * rate * 100) / 100,
         billedToDate:    Math.round(hoursToDate       * rate * 100) / 100,
         departmentHours: deptHoursMap[p.id] ?? {},
+        departmentAllocatedHours: deptAllocatedMap[p.id] ?? {},
       };
     })
     .filter((p) => p.hoursToDate > 0)
@@ -186,15 +185,26 @@ export default async function DashboardPage() {
 
   const departments = [...departmentSet].sort();
 
+  // ── Data for client-side Division/Role filtering of KPI tiles ──────────────
+  const usersForStats = allUsers.map((u) => ({
+    id: u.id, divisionId: u.divisionId, department: u.department, capacity: u.capacity,
+  }));
+  const allocationsForStats = activeAllocations.map((a) => ({
+    userId: a.userId, projectId: a.projectId, hoursPerDay: a.hoursPerDay,
+  }));
+  const activeProjectsForStats = projects.map((p) => ({ id: p.id, divisionId: p.divisionId }));
+  const leavesForStats = openLeaves.map((l) => ({
+    divisionId: l.user.divisionId, department: l.user.department,
+  }));
+
   return (
     <DashboardClient
       todayISO={todayISO}
-      totalHeadcount={allUsers.length}
-      utilPct={utilPct}
-      benchCount={benchCount}
-      activeProjectCount={projects.length}
-      pendingLeaveCount={openLeaves.length}
       pipelineCount={pipeline.length}
+      users={usersForStats}
+      allocations={allocationsForStats}
+      activeProjects={activeProjectsForStats}
+      leaves={leavesForStats}
       divStats={divStats}
       topProjects={topProjects}
       departments={departments}
@@ -202,6 +212,7 @@ export default async function DashboardPage() {
         userName:    a.user.name ?? "—",
         projectName: a.project.name,
         divisionId:  a.user.divisionId,
+        department:  a.user.department,
         endDate:     a.endDate.toISOString(),
       }))}
       pipeline={pipeline.map((p) => ({

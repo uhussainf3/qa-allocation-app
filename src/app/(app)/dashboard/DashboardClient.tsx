@@ -1,6 +1,20 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
+import {
+  filterUsers,
+  computeUtilPct,
+  computeBenchCount,
+  computeActiveProjectCount,
+  computeFilteredLeaveCount,
+  filterEndingSoon,
+  buildDivisionRoleStats,
+  type DashboardUser,
+  type DashboardAllocation,
+  type DashboardActiveProject,
+  type DashboardLeave,
+} from "@/lib/dashboardUtils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,6 +35,7 @@ type EndingSoon = {
   userName:    string;
   projectName: string;
   divisionId:  string | null;
+  department:  string | null;
   endDate:     string;
 };
 
@@ -40,6 +55,7 @@ type TopProject = {
   allocatedValue:   number;
   billedToDate:     number;
   departmentHours:  Record<string, number>;
+  departmentAllocatedHours: Record<string, number>;
 };
 
 type PipelineItem = {
@@ -55,12 +71,11 @@ type PipelineItem = {
 
 interface Props {
   todayISO:           string;
-  totalHeadcount:     number;
-  utilPct:            number;
-  benchCount:         number;
-  activeProjectCount: number;
-  pendingLeaveCount:  number;
   pipelineCount:      number;
+  users:              DashboardUser[];
+  allocations:        DashboardAllocation[];
+  activeProjects:     DashboardActiveProject[];
+  leaves:             DashboardLeave[];
   divStats:           DivisionStat[];
   topProjects:        TopProject[];
   departments:        string[];
@@ -90,8 +105,8 @@ const PIPELINE_LABELS: Record<string, string> = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function DashboardClient({
-  todayISO, totalHeadcount, utilPct, benchCount,
-  activeProjectCount, pendingLeaveCount, pipelineCount,
+  todayISO, pipelineCount,
+  users, allocations, activeProjects, leaves,
   divStats, topProjects, departments, endingSoon, pipeline, allDivisions,
 }: Props) {
   const [filterDivision, setFilterDivision] = useState("");
@@ -101,15 +116,41 @@ export function DashboardClient({
     weekday: "long", day: "numeric", month: "long", year: "numeric",
   });
 
-  // ── Filtered division stats
-  const visibleDivs = useMemo(
-    () => filterDivision ? divStats.filter((d) => d.id === filterDivision) : divStats,
-    [divStats, filterDivision]
+  // ── Users matching the current Division + Role filters (drives all KPI tiles) ──
+  const filteredUsers = useMemo(
+    () => filterUsers(users, filterDivision, roleFilter),
+    [users, filterDivision, roleFilter]
   );
 
+  const totalHeadcount     = filteredUsers.length;
+  const utilPct            = useMemo(() => computeUtilPct(filteredUsers, allocations), [filteredUsers, allocations]);
+  const benchCount         = useMemo(() => computeBenchCount(filteredUsers, allocations), [filteredUsers, allocations]);
+  const activeProjectCount = useMemo(
+    () => computeActiveProjectCount(activeProjects, allocations, filteredUsers, filterDivision, roleFilter),
+    [activeProjects, allocations, filteredUsers, filterDivision, roleFilter]
+  );
+  const pendingLeaveCount  = useMemo(
+    () => computeFilteredLeaveCount(leaves, filterDivision, roleFilter),
+    [leaves, filterDivision, roleFilter]
+  );
+
+  // ── Division Breakdown cards — headcount/utilisation recomputed per Role filter ──
+  const divisionRoleStats = useMemo(
+    () => buildDivisionRoleStats(divStats.map((d) => d.id), users, allocations, roleFilter),
+    [divStats, users, allocations, roleFilter]
+  );
+
+  const visibleDivs = useMemo(() => {
+    const merged = divStats.map((d) => {
+      const roleStat = divisionRoleStats.find((r) => r.id === d.id);
+      return roleStat ? { ...d, headcount: roleStat.headcount, utilPct: roleStat.utilPct } : d;
+    });
+    return filterDivision ? merged.filter((d) => d.id === filterDivision) : merged;
+  }, [divStats, divisionRoleStats, filterDivision]);
+
   const filteredEndingSoon = useMemo(
-    () => filterDivision ? endingSoon.filter((e) => e.divisionId === filterDivision) : endingSoon,
-    [endingSoon, filterDivision]
+    () => filterEndingSoon(endingSoon, filterDivision, roleFilter),
+    [endingSoon, filterDivision, roleFilter]
   );
 
   const filteredTopProjects = useMemo(() => {
@@ -136,7 +177,17 @@ export function DashboardClient({
       <div className="page-head">
         <div>
           <h1 className="page-title">Executive Dashboard</h1>
-          <div className="page-sub">{today}</div>
+          <div className="page-sub">
+            {today}
+            {(roleFilter || filterDivision) && (
+              <span style={{ marginLeft: 10, color: "var(--accent)" }}>
+                · Showing {[roleFilter, allDivisions.find((d) => d.id === filterDivision)?.name]
+                  .filter(Boolean)
+                  .join(" · ")}
+                {" "}(KPIs, Division Breakdown and Ending Soon — Pipeline always shows all)
+              </span>
+            )}
+          </div>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           {/* Role / department filter (scopes the Top 10 Projects panel) */}
@@ -257,6 +308,7 @@ export function DashboardClient({
               <tr style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
                 <th style={{ textAlign: "left",  padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Project</th>
                 <th style={{ textAlign: "left",  padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Manager</th>
+                <th style={{ textAlign: "right", padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Allocated</th>
                 <th style={{ textAlign: "right", padding: "8px 14px", fontWeight: 500, fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Hours to Date</th>
               </tr>
             </thead>
@@ -264,15 +316,23 @@ export function DashboardClient({
               {filteredTopProjects.map((p, i) => (
                 <tr key={p.id} style={{ borderBottom: i < filteredTopProjects.length - 1 ? "1px solid var(--border)" : "none" }}>
                   <td style={{ padding: "10px 14px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Link
+                      href={`/projects?search=${encodeURIComponent(p.code)}`}
+                      style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "inherit" }}
+                    >
                       <span style={{ width: 9, height: 9, borderRadius: "50%", background: p.color, flexShrink: 0 }} />
                       <div>
-                        <div style={{ fontWeight: 500 }}>{p.name}</div>
+                        <div style={{ fontWeight: 500, color: "var(--accent)" }}>{p.name}</div>
                         <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{p.code}</div>
                       </div>
-                    </div>
+                    </Link>
                   </td>
                   <td style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: 12 }}>{p.managerName ?? "—"}</td>
+                  <td style={{ padding: "10px 14px", textAlign: "right" }}>
+                    {roleFilter
+                      ? Math.round(p.departmentAllocatedHours[roleFilter] ?? 0)
+                      : Math.round(p.allocatedHours)}h
+                  </td>
                   <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 600 }}>
                     {roleFilter
                       ? Math.round(p.departmentHours[roleFilter] ?? 0)

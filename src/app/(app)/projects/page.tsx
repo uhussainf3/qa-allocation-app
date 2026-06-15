@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { auth }            from "@/lib/auth";
 import { prisma }          from "@/lib/prisma";
 import { totalWorkingDays } from "@/lib/weeks";
@@ -119,23 +120,25 @@ export default async function ProjectsPage() {
   }
 
   return (
-    <ProjectsClient
-      projects={projects.map((p) => ({
-        ...p,
-        consumedHours:  consumedMap[p.id] ?? 0,
-        allocatedHours: Math.round((allocatedMap[p.id]   ?? 0) * 10) / 10,
-        hoursToDate:    Math.round((hoursToDateMap[p.id] ?? 0) * 10) / 10,
-        engineerBreakdown: Object.values(engineerBreakdownMap[p.id] ?? {})
-          .map((e) => ({
-            ...e,
-            hoursToDate:    Math.round(e.hoursToDate    * 10) / 10,
-            totalAllocated: Math.round(e.totalAllocated * 10) / 10,
-          }))
-          .sort((a, b) => b.totalAllocated - a.totalAllocated),
-      }))}
-      currentUserRole={session!.user.role as Role}
-      teamMembers={teamMembers.map((u) => ({ id: u.id, name: u.name, role: u.role, department: u.department ?? null }))}
-      divisions={divisions.map((d) => ({ id: d.id, name: d.name, code: d.code, color: d.color }))}
-    />
+    <Suspense>
+      <ProjectsClient
+        projects={projects.map((p) => ({
+          ...p,
+          consumedHours:  consumedMap[p.id] ?? 0,
+          allocatedHours: Math.round((allocatedMap[p.id]   ?? 0) * 10) / 10,
+          hoursToDate:    Math.round((hoursToDateMap[p.id] ?? 0) * 10) / 10,
+          engineerBreakdown: Object.values(engineerBreakdownMap[p.id] ?? {})
+            .map((e) => ({
+              ...e,
+              hoursToDate:    Math.round(e.hoursToDate    * 10) / 10,
+              totalAllocated: Math.round(e.totalAllocated * 10) / 10,
+            }))
+            .sort((a, b) => b.totalAllocated - a.totalAllocated),
+        }))}
+        currentUserRole={session!.user.role as Role}
+        teamMembers={teamMembers.map((u) => ({ id: u.id, name: u.name, role: u.role, department: u.department ?? null }))}
+        divisions={divisions.map((d) => ({ id: d.id, name: d.name, code: d.code, color: d.color }))}
+      />
+    </Suspense>
   );
 }

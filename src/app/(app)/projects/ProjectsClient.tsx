@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Role } from "@/types/enums";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -73,11 +73,22 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
   const router  = useRouter();
   const canEdit = ["ADMIN", "DIVISION_OWNER", "PROJECT_MANAGER"].includes(currentUserRole);
 
+  // Deep link from the Executive Dashboard: /projects?search=<code> pre-fills
+  // the search box and selects that project's card.
+  const searchParams  = useSearchParams();
+  const initialSearch = searchParams.get("search") ?? "";
+
   const [divisionFilter, setDivisionFilter] = useState("");
   const [pmFilter,       setPmFilter]       = useState("");
-  const [searchQuery,    setSearchQuery]    = useState("");
+  const [searchQuery,    setSearchQuery]    = useState(initialSearch);
   const [projects,       setProjects]       = useState<Project[]>(initialProjects);
-  const [selected,      setSelected]      = useState<Project | null>(initialProjects[0] ?? null);
+  const [selected,      setSelected]      = useState<Project | null>(() => {
+    if (initialSearch) {
+      const match = initialProjects.find((p) => p.code.toLowerCase() === initialSearch.toLowerCase());
+      if (match) return match;
+    }
+    return initialProjects[0] ?? null;
+  });
   const [activeTab,     setActiveTab]     = useState<"overview"|"tasks">("overview");
   const [showModal,     setShowModal]     = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
