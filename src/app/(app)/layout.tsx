@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { UpdateBanner } from "@/components/layout/UpdateBanner";
 import { Providers } from "@/components/providers";
 
 export default async function AppLayout({
@@ -15,7 +16,10 @@ export default async function AppLayout({
     <Providers>
       <div className="app has-sidebar">
         <Sidebar user={session.user} />
-        <main className="main">{children}</main>
+        <main className="main">
+          <UpdateBanner />
+          {children}
+        </main>
       </div>
     </Providers>
   );

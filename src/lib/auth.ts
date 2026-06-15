@@ -10,6 +10,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      // Employees are pre-provisioned as `User` rows by the RM Tool /
+      // Weekly Upload import (with an email but no linked `Account`)
+      // before they ever sign in. Without this flag, Auth.js's
+      // PrismaAdapter refuses to link their first Google sign-in to that
+      // pre-existing User row and redirects to
+      // /login?error=OAuthAccountNotLinked. Google verifies email
+      // ownership, so linking by email here is safe.
+      allowDangerousEmailAccountLinking: true,
     }),
   ],
   callbacks: {

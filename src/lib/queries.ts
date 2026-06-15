@@ -248,6 +248,31 @@ export const getCachedAllAllocationsForProjects = unstable_cache(
   { revalidate: TTL, tags: ["allocations", "users"] }
 );
 
+// ─── Allocation Batches ───────────────────────────────────────────────────────
+
+/** The current (most recently uploaded) allocation batch — for the top banner. */
+export const getCachedCurrentBatch = unstable_cache(
+  async () => {
+    const batch = await prisma.allocationBatch.findFirst({
+      where: { isCurrent: true },
+      select: {
+        label:      true,
+        uploadedAt: true,
+        uploadedBy: { select: { name: true, email: true } },
+      },
+      orderBy: { uploadedAt: "desc" },
+    });
+    if (!batch) return null;
+    return {
+      label:          batch.label,
+      uploadedAt:     batch.uploadedAt.toISOString(),
+      uploadedByName: batch.uploadedBy?.name ?? batch.uploadedBy?.email ?? null,
+    };
+  },
+  ["current-allocation-batch"],
+  { revalidate: TTL, tags: ["allocations"] }
+);
+
 // ─── Public Holidays ──────────────────────────────────────────────────────────
 
 /** All public holidays (YYYY-MM-DD strings), ordered by date. */

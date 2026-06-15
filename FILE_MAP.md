@@ -11,7 +11,7 @@ These fetch data from DB and pass it to Client components. No interactivity here
 | File | Route | What it does |
 |------|-------|-------------|
 | `app/page.tsx` | `/` | Redirects to `/allocations` |
-| `app/(app)/layout.tsx` | (all app routes) | Wraps every page with auth check + Sidebar |
+| `app/(app)/layout.tsx` | (all app routes) | Wraps every page with auth check + Sidebar + UpdateBanner ("data last updated") |
 | `app/(app)/allocations/page.tsx` | `/allocations` | Fetches users + allocations for 12-week grid; passes to AllocationsClient |
 | `app/(app)/allocation-list/page.tsx` | `/allocation-list` | Fetches all allocations list view; passes to AllocationListClient |
 | `app/(app)/capacity/page.tsx` | `/capacity` | Fetches 12-week capacity data, filters by division via URL searchParam |
@@ -68,6 +68,7 @@ These handle UI state, dropdowns, modals, CRUD calls. Always in a `*Client.tsx` 
 | File | What it does |
 |------|-------------|
 | `components/layout/Sidebar.tsx` | Left nav sidebar — role-aware nav links, user badge, role label |
+| `components/layout/UpdateBanner.tsx` | Top-of-page banner (rendered in `(app)/layout.tsx` above `{children}`) — shows when the current allocation batch (RM Migration / Weekly Upload) was last imported and by whom; warns if stale (>7 days) |
 | `components/DivisionFilter.tsx` | Reusable division dropdown — updates URL `?division=` param (used by Capacity + Forecast) |
 | `components/providers.tsx` | Wraps app in `SessionProvider` (NextAuth client session context) |
 
@@ -160,6 +161,7 @@ These handle UI state, dropdowns, modals, CRUD calls. Always in a `*Client.tsx` 
 | `lib/apiResponse.ts` | Tiny helpers — `ok()`, `err()`, `unauthorized()`, `forbidden()`, `notFound()` for consistent API responses |
 | `lib/resetUtils.ts` | Pure helpers for the ADMIN "Danger Zone" reset: `buildResetSummary`, `totalRecordsToDelete`, `isResetConfirmed`, `RESET_CONFIRM_PHRASE`, `RESET_LABELS`, `RESET_PRESERVED_LABELS` |
 | `lib/divisionMergeUtils.ts` | Pure helpers for the Divisions page "Merge into…" action: `validateMerge`, `buildMergePreview`, `mergeTargetOptions` |
+| `lib/batchBannerUtils.ts` | Pure helpers for the top "data last updated" banner: `formatRelativeTime`, `buildBatchBannerInfo`, `STALE_THRESHOLD_MS` |
 | `proxy.ts` | Next.js middleware (runs on every request) — auth guard, role-based route protection |
 
 ---
