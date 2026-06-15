@@ -318,6 +318,8 @@ export function DashboardClient({
                   <td style={{ padding: "10px 14px" }}>
                     <Link
                       href={`/projects?search=${encodeURIComponent(p.code)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "inherit" }}
                     >
                       <span style={{ width: 9, height: 9, borderRadius: "50%", background: p.color, flexShrink: 0 }} />
