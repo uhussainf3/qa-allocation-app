@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { canViewExecutiveDashboard } from "@/lib/accessUtils";
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
@@ -22,6 +23,7 @@ export default auth((req) => {
   }
 
   const role = req.auth.user?.role;
+  const jobTitle = req.auth.user?.jobTitle;
 
   // Admin-only pages
   if (
@@ -31,8 +33,8 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
-  // Executive Dashboard — ADMIN + EXECUTIVE only
-  if (pathname.startsWith("/dashboard") && role !== "ADMIN" && role !== "EXECUTIVE") {
+  // Executive Dashboard — ADMIN + EXECUTIVE, or any user with jobTitle "VP"
+  if (pathname.startsWith("/dashboard") && !canViewExecutiveDashboard(role ?? "MEMBER", jobTitle)) {
     return NextResponse.redirect(new URL("/", req.url));
   }
 

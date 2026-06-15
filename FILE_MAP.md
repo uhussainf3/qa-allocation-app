@@ -162,6 +162,7 @@ These handle UI state, dropdowns, modals, CRUD calls. Always in a `*Client.tsx` 
 | `lib/resetUtils.ts` | Pure helpers for the ADMIN "Danger Zone" reset: `buildResetSummary`, `totalRecordsToDelete`, `isResetConfirmed`, `RESET_CONFIRM_PHRASE`, `RESET_LABELS`, `RESET_PRESERVED_LABELS` |
 | `lib/divisionMergeUtils.ts` | Pure helpers for the Divisions page "Merge into…" action: `validateMerge`, `buildMergePreview`, `mergeTargetOptions` |
 | `lib/batchBannerUtils.ts` | Pure helpers for the top "data last updated" banner: `formatRelativeTime`, `buildBatchBannerInfo`, `STALE_THRESHOLD_MS` |
+| `lib/accessUtils.ts` | Shared access-control predicate `canViewExecutiveDashboard(role, jobTitle)` — used by proxy.ts, dashboard page guard, and Sidebar nav |
 | `proxy.ts` | Next.js middleware (runs on every request) — auth guard, role-based route protection |
 
 ---

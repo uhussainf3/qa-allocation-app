@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { totalWorkingDays } from "@/lib/weeks";
 import { getCachedAllAllocationsForProjects, getCachedPublicHolidays } from "@/lib/queries";
+import { canViewExecutiveDashboard } from "@/lib/accessUtils";
 import { DashboardClient } from "./DashboardClient";
 
 export const metadata = { title: "Executive Dashboard" };
@@ -10,7 +11,7 @@ export const metadata = { title: "Executive Dashboard" };
 export default async function DashboardPage() {
   const session = await auth();
   if (!session) redirect("/login");
-  if (session.user.role !== "ADMIN" && session.user.role !== "EXECUTIVE") redirect("/");
+  if (!canViewExecutiveDashboard(session.user.role, session.user.jobTitle)) redirect("/");
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);

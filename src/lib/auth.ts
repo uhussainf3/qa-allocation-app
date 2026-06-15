@@ -25,6 +25,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user) {
         session.user.id = user.id;
         session.user.role = (user as unknown as { role: Role }).role;
+        session.user.jobTitle = (user as unknown as { jobTitle: string | null }).jobTitle;
       }
       return session;
     },

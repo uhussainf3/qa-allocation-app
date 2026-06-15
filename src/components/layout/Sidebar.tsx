@@ -4,17 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import type { Role } from "@/types/enums";
+import { canViewExecutiveDashboard } from "@/lib/accessUtils";
 
 type NavItem = { href: string; label: string };
 type NavGroup = { group: string; items: NavItem[]; roles?: Role[] };
 
 const NAV: NavGroup[] = [
   {
+    // Visibility for this group is handled by canViewExecutiveDashboard()
+    // below (ADMIN/EXECUTIVE roles, or any user with jobTitle "VP").
     group: "Overview",
     items: [
       { href: "/dashboard", label: "Executive Dashboard" },
     ],
-    roles: ["ADMIN", "EXECUTIVE"],
   },
   {
     group: "Plan",
@@ -68,6 +70,7 @@ interface Props {
     email?: string | null;
     image?: string | null;
     role: Role;
+    jobTitle?: string | null;
   };
 }
 
@@ -97,9 +100,13 @@ export function Sidebar({ user }: Props) {
       </div>
 
       <nav className="side-nav">
-        {NAV.filter(
-          (grp) => !grp.roles || grp.roles.includes(user.role)
-        ).map((grp) => (
+        {NAV.filter((grp) => {
+          // "Overview" (Executive Dashboard) uses the shared access
+          // predicate so ADMIN/EXECUTIVE roles AND any VP-titled user
+          // see the link (kept in sync with proxy.ts + dashboard guard).
+          if (grp.group === "Overview") return canViewExecutiveDashboard(user.role, user.jobTitle);
+          return !grp.roles || grp.roles.includes(user.role);
+        }).map((grp) => (
           <div className="side-group" key={grp.group}>
             <div className="side-label">{grp.group}</div>
             {grp.items.map((item) => (
