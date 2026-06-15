@@ -48,7 +48,7 @@ These handle UI state, dropdowns, modals, CRUD calls. Always in a `*Client.tsx` 
 | `app/(app)/projects/ProjectsClient.tsx` | `/projects` | Project cards with status/hours/engineer breakdown, add/edit project modal, division filter |
 | `app/(app)/dashboard/DashboardClient.tsx` | `/dashboard` | Company KPIs, per-division utilisation bars, ending-soon table, pipeline summary |
 | `app/(app)/team/TeamClient.tsx` | `/team` | Full team roster — search, filters, add/edit/deactivate member modal |
-| `app/(app)/divisions/DivisionsClient.tsx` | `/divisions` | Division CRUD — create/edit/delete divisions, color picker, owner assignment |
+| `app/(app)/divisions/DivisionsClient.tsx` | `/divisions` | Division CRUD — create/edit/delete divisions, color picker, owner assignment, "Merge into…" action to reassign all members/projects into another division |
 | `app/(app)/pipeline/PipelineClient.tsx` | `/pipeline` | Pipeline kanban/table — add/edit/convert opportunities, probability/deal size |
 | `app/(app)/leave/LeaveClient.tsx` | `/leave` | Leave request form, approve/reject (managers), leave calendar |
 | `app/(app)/requests/RequestsClient.tsx` | `/requests` | Resource request form, status updates, assign engineer |
@@ -99,6 +99,7 @@ These handle UI state, dropdowns, modals, CRUD calls. Always in a `*Client.tsx` 
 |------|----------|-------------|
 | `app/api/divisions/route.ts` | `GET/POST /api/divisions` | List all divisions / create new division (ADMIN only) |
 | `app/api/divisions/[id]/route.ts` | `PATCH/DELETE /api/divisions/[id]` | Update division / delete (blocked if has members or projects) |
+| `app/api/divisions/[id]/merge/route.ts` | `POST /api/divisions/[id]/merge` | ADMIN only — reassigns all Users + Projects from division [id] to `targetId` (body); source division ends with 0 members/projects so it can then be deleted |
 
 ### Pipeline
 | File | Endpoint | What it does |
@@ -158,6 +159,7 @@ These handle UI state, dropdowns, modals, CRUD calls. Always in a `*Client.tsx` 
 | `lib/weeks.ts` | Date/week utilities — `getMondayOf`, `getNextNWeeks`, `workingDaysInWeek`, `totalWorkingDays`, `getWeekLabel` |
 | `lib/apiResponse.ts` | Tiny helpers — `ok()`, `err()`, `unauthorized()`, `forbidden()`, `notFound()` for consistent API responses |
 | `lib/resetUtils.ts` | Pure helpers for the ADMIN "Danger Zone" reset: `buildResetSummary`, `totalRecordsToDelete`, `isResetConfirmed`, `RESET_CONFIRM_PHRASE`, `RESET_LABELS`, `RESET_PRESERVED_LABELS` |
+| `lib/divisionMergeUtils.ts` | Pure helpers for the Divisions page "Merge into…" action: `validateMerge`, `buildMergePreview`, `mergeTargetOptions` |
 | `proxy.ts` | Next.js middleware (runs on every request) — auth guard, role-based route protection |
 
 ---

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { validateMerge, buildMergePreview, mergeTargetOptions } from "@/lib/divisionMergeUtils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,6 +58,12 @@ export function DivisionsClient({ divisions: initial, users }: Props) {
   const [form, setForm]              = useState(EMPTY_FORM);
   const [saving, setSaving]          = useState(false);
   const [error, setError]            = useState<string | null>(null);
+
+  // ── Merge divisions
+  const [mergeSource, setMergeSource] = useState<Division | null>(null);
+  const [mergeTargetId, setMergeTargetId] = useState("");
+  const [mergeError, setMergeError]   = useState<string | null>(null);
+  const [merging, setMerging]         = useState(false);
 
   // ── Open create/edit modal
   function openCreate() {
@@ -116,6 +123,60 @@ export function DivisionsClient({ divisions: initial, users }: Props) {
     if (res.ok) {
       setDivisions((prev) => prev.map((x) => x.id === d.id ? { ...x, isActive: !d.isActive } : x));
       startTransition(() => router.refresh());
+    }
+  }
+
+  // ── Merge
+  function openMerge(d: Division) {
+    setMergeSource(d);
+    setMergeTargetId("");
+    setMergeError(null);
+  }
+  function closeMerge() {
+    setMergeSource(null);
+    setMergeTargetId("");
+    setMergeError(null);
+  }
+  async function handleMerge() {
+    if (!mergeSource) return;
+    const validation = validateMerge(mergeSource.id, mergeTargetId);
+    if (!validation.valid) {
+      setMergeError(validation.error ?? "Invalid merge");
+      return;
+    }
+    const target = divisions.find((d) => d.id === mergeTargetId);
+    if (!target) {
+      setMergeError("Target division not found.");
+      return;
+    }
+    const preview = buildMergePreview(
+      { id: mergeSource.id, code: mergeSource.code, name: mergeSource.name, memberCount: mergeSource._count.members, projectCount: mergeSource._count.projects },
+      { id: target.id, code: target.code, name: target.name, memberCount: target._count.members, projectCount: target._count.projects }
+    );
+    if (!confirm(
+      `Move ${preview.usersToMove} member(s) and ${preview.projectsToMove} project(s) from ` +
+      `"${mergeSource.name}" (${mergeSource.code}) into "${target.name}" (${target.code})?\n\n` +
+      `"${target.name}" will then have ${preview.resultingTargetMembers} member(s) and ` +
+      `${preview.resultingTargetProjects} project(s).\n\n` +
+      `"${mergeSource.name}" will become empty and can then be deleted.`
+    )) return;
+
+    setMerging(true);
+    setMergeError(null);
+    try {
+      const res = await fetch(`/api/divisions/${mergeSource.id}/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetId: mergeTargetId }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setMergeError(json.error ?? "Merge failed"); return; }
+      closeMerge();
+      startTransition(() => router.refresh());
+    } catch {
+      setMergeError("Network error");
+    } finally {
+      setMerging(false);
     }
   }
 
@@ -205,7 +266,7 @@ export function DivisionsClient({ divisions: initial, users }: Props) {
             )}
 
             {/* Actions */}
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button className="btn btn-sm" onClick={() => openEdit(d)}>Edit</button>
               <button
                 className="btn btn-sm"
@@ -214,6 +275,11 @@ export function DivisionsClient({ divisions: initial, users }: Props) {
               >
                 {d.isActive ? "Deactivate" : "Activate"}
               </button>
+              {divisions.length > 1 && (d._count.members > 0 || d._count.projects > 0) && (
+                <button className="btn btn-sm" onClick={() => openMerge(d)}>
+                  Merge into…
+                </button>
+              )}
               {d._count.members === 0 && d._count.projects === 0 && (
                 <button
                   className="btn btn-sm"
@@ -321,6 +387,69 @@ export function DivisionsClient({ divisions: initial, users }: Props) {
               <button className="btn" onClick={() => setShowModal(false)} disabled={saving}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
                 {saving ? "Saving…" : editTarget ? "Save Changes" : "Create Division"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Merge modal */}
+      {mergeSource && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={(e) => { if (e.target === e.currentTarget) closeMerge(); }}
+        >
+          <div className="card" style={{ width: 480, padding: 28 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>
+              Merge &quot;{mergeSource.name}&quot; ({mergeSource.code})
+            </h2>
+            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 18 }}>
+              Moves all {mergeSource._count.members} member(s) and {mergeSource._count.projects} project(s)
+              out of this division into the target you choose below. This division will then be empty
+              and can be deleted.
+            </div>
+
+            <label style={{ fontSize: 13 }}>
+              <div style={{ marginBottom: 4, fontWeight: 500 }}>Merge into *</div>
+              <select
+                className="input"
+                value={mergeTargetId}
+                onChange={(e) => setMergeTargetId(e.target.value)}
+                style={{ width: "100%" }}
+              >
+                <option value="">— Select target division —</option>
+                {mergeTargetOptions(divisions, mergeSource.id).map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} ({d.code}) — {d._count.members} member(s), {d._count.projects} project(s)
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {mergeTargetId && (() => {
+              const target = divisions.find((d) => d.id === mergeTargetId);
+              if (!target) return null;
+              const preview = buildMergePreview(
+                { id: mergeSource.id, code: mergeSource.code, name: mergeSource.name, memberCount: mergeSource._count.members, projectCount: mergeSource._count.projects },
+                { id: target.id, code: target.code, name: target.name, memberCount: target._count.members, projectCount: target._count.projects }
+              );
+              return (
+                <div style={{ marginTop: 14, fontSize: 13, color: "var(--text-muted)" }}>
+                  After merging, &quot;{target.name}&quot; will have{" "}
+                  <strong style={{ color: "var(--text)" }}>{preview.resultingTargetMembers}</strong> member(s) and{" "}
+                  <strong style={{ color: "var(--text)" }}>{preview.resultingTargetProjects}</strong> project(s).
+                </div>
+              );
+            })()}
+
+            {mergeError && (
+              <div style={{ marginTop: 14, color: "var(--danger, #ef4444)", fontSize: 13 }}>{mergeError}</div>
+            )}
+
+            <div style={{ display: "flex", gap: 10, marginTop: 22, justifyContent: "flex-end" }}>
+              <button className="btn" onClick={closeMerge} disabled={merging}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleMerge} disabled={merging || !mergeTargetId}>
+                {merging ? "Merging…" : "Merge"}
               </button>
             </div>
           </div>
