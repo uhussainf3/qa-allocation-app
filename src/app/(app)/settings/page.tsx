@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { getCachedPublicHolidays, getCachedJobTitles } from "@/lib/queries";
 import { HolidaysClient } from "./HolidaysClient";
 import { JobTitlesClient } from "./JobTitlesClient";
+import { DangerZoneClient } from "./DangerZoneClient";
 import type { Role } from "@/types/enums";
 
 export const metadata = { title: "Settings" };
@@ -35,6 +36,8 @@ export default async function SettingsPage() {
         initialHolidays={holidays}
         currentUserRole={session!.user.role as Role}
       />
+
+      {session!.user.role === "ADMIN" && <DangerZoneClient />}
     </div>
   );
 }

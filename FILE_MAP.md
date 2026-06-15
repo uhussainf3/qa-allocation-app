@@ -30,7 +30,7 @@ These fetch data from DB and pass it to Client components. No interactivity here
 | `app/(app)/tasks/page.tsx` | `/tasks` | Renders MyTasksClient (tasks fetched client-side) |
 | `app/(app)/skills/page.tsx` | `/skills` | Fetches skill matrix (users × skills × levels); renders inline (no client component) |
 | `app/(app)/audit/page.tsx` | `/audit` | Fetches last 200 audit log entries; renders inline table (no client component) |
-| `app/(app)/settings/page.tsx` | `/settings` | Fetches public holidays; passes to HolidaysClient |
+| `app/(app)/settings/page.tsx` | `/settings` | Fetches public holidays + job titles; passes to HolidaysClient/JobTitlesClient; renders DangerZoneClient for ADMIN |
 | `app/(app)/import/page.tsx` | `/import` | ADMIN/PM only gate; renders ImportClient |
 | `app/(app)/notifications/page.tsx` | `/notifications` | Fetches last 50 notifications for current user; passes to NotificationsClient |
 | `app/(auth)/login/page.tsx` | `/login` | Login page shell |
@@ -56,6 +56,7 @@ These handle UI state, dropdowns, modals, CRUD calls. Always in a `*Client.tsx` 
 | `app/(app)/timesheets/TimesheetsClient.tsx` | `/timesheets` | Timesheet submit/review/approve flow |
 | `app/(app)/tasks/MyTasksClient.tsx` | `/tasks` | My tasks list — fetches tasks client-side, mark complete |
 | `app/(app)/settings/HolidaysClient.tsx` | `/settings` | Add/delete public holidays (ADMIN only) |
+| `app/(app)/settings/DangerZoneClient.tsx` | `/settings` | ADMIN only — dry-run preview + confirm-gated full data reset (wipes divisions/projects/allocations/users except self) |
 | `app/(app)/import/ImportClient.tsx` | `/import` | CSV import wizard; Weekly Upload (auto-create employees/projects, import logs); Import History tab |
 | `app/(app)/notifications/NotificationsClient.tsx` | `/notifications` | Notification list, mark as read |
 | `app/(auth)/login/LoginButton.tsx` | `/login` | Google sign-in button |
@@ -140,6 +141,7 @@ These handle UI state, dropdowns, modals, CRUD calls. Always in a `*Client.tsx` 
 | `app/api/import/employees/route.ts` | `POST /api/import/employees` | ADMIN — upsert employees; jobTitle from Position column, department from Role column |
 | `app/api/import/allocations/route.ts` | `POST /api/import/allocations` | ADMIN+DO — create AllocationBatch + upsert allocations; auto-creates missing employees/projects; dryRun:true for preview; stores log JSON on batch |
 | `app/api/import/allocations/batches/route.ts` | `GET /api/import/allocations/batches` | List all AllocationBatch records newest-first with allocation counts, log, and uploader name |
+| `app/api/admin/reset/route.ts` | `GET/POST /api/admin/reset` | ADMIN only — "Danger Zone" full data reset. GET returns dry-run counts + details; POST (body `{ confirm: "DELETE ALL DATA" }`) deletes all Divisions/Projects/Allocations/dependents and all Users except the caller |
 | `app/api/keep-alive/route.ts` | `GET /api/keep-alive` | Pings DB to prevent Neon cold start |
 | `app/api/auth/[...nextauth]/route.ts` | `/api/auth/*` | NextAuth.js handler (Google OAuth) |
 | `app/api/test/session/route.ts` | `/api/test/session` | Dev-only: inspect current session |
@@ -155,6 +157,7 @@ These handle UI state, dropdowns, modals, CRUD calls. Always in a `*Client.tsx` 
 | `lib/prisma.ts` | Prisma client singleton (prevents multiple instances in dev hot-reload) |
 | `lib/weeks.ts` | Date/week utilities — `getMondayOf`, `getNextNWeeks`, `workingDaysInWeek`, `totalWorkingDays`, `getWeekLabel` |
 | `lib/apiResponse.ts` | Tiny helpers — `ok()`, `err()`, `unauthorized()`, `forbidden()`, `notFound()` for consistent API responses |
+| `lib/resetUtils.ts` | Pure helpers for the ADMIN "Danger Zone" reset: `buildResetSummary`, `totalRecordsToDelete`, `isResetConfirmed`, `RESET_CONFIRM_PHRASE`, `RESET_LABELS`, `RESET_PRESERVED_LABELS` |
 | `proxy.ts` | Next.js middleware (runs on every request) — auth guard, role-based route protection |
 
 ---
