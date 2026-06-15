@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { auth }            from "@/lib/auth";
 import { prisma }          from "@/lib/prisma";
 import { totalWorkingDays } from "@/lib/weeks";
+import { computeAllocationPct, groupAllocationsByCategory, type ProjectAllocationRow } from "@/lib/projectAllocationUtils";
 import { ProjectsClient }  from "./ProjectsClient";
 import {
   getCachedProjectsFull,
@@ -85,6 +86,8 @@ export default async function ProjectsPage() {
   const hoursToDateMap: Record<string, number> = {};
   type EngineerEntry = { userId: string; userName: string | null; hoursToDate: number; totalAllocated: number };
   const engineerBreakdownMap: Record<string, Record<string, EngineerEntry>> = {};
+  const allocationRowsMap: Record<string, ProjectAllocationRow[]> = {};
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   for (const a of allocations) {
     const start = new Date(a.startDate);
@@ -117,6 +120,19 @@ export default async function ProjectsPage() {
     }
     engineerBreakdownMap[a.projectId][a.userId].hoursToDate    += netToDate;
     engineerBreakdownMap[a.projectId][a.userId].totalAllocated += netTotal;
+
+    // Per-allocation row for the "Allocations" tab (Active / Upcoming / Ended)
+    if (!allocationRowsMap[a.projectId]) allocationRowsMap[a.projectId] = [];
+    allocationRowsMap[a.projectId].push({
+      id:            a.id,
+      userId:        a.userId,
+      userName:      a.userName,
+      startDate:     a.startDate,
+      endDate:       a.endDate,
+      allocationPct: computeAllocationPct(a.hoursPerDay, a.userCapacity),
+      hoursToDate:   Math.round(netToDate * 10) / 10,
+      totalHours:    Math.round(netTotal  * 10) / 10,
+    });
   }
 
   return (
@@ -134,6 +150,7 @@ export default async function ProjectsPage() {
               totalAllocated: Math.round(e.totalAllocated * 10) / 10,
             }))
             .sort((a, b) => b.totalAllocated - a.totalAllocated),
+          allocationDetails: groupAllocationsByCategory(allocationRowsMap[p.id] ?? [], todayStr),
         }))}
         currentUserRole={session!.user.role as Role}
         teamMembers={teamMembers.map((u) => ({ id: u.id, name: u.name, role: u.role, department: u.department ?? null }))}

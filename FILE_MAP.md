@@ -17,7 +17,7 @@ These fetch data from DB and pass it to Client components. No interactivity here
 | `app/(app)/capacity/page.tsx` | `/capacity` | Fetches 12-week capacity data, filters by division via URL searchParam |
 | `app/(app)/forecast/page.tsx` | `/forecast` | Fetches 13-week demand vs capacity; filters by division via URL searchParam |
 | `app/(app)/bench/page.tsx` | `/bench` | Fetches today's active allocations; excludes isOnshore users before bench calc; passes to BenchClient |
-| `app/(app)/projects/page.tsx` | `/projects` | Fetches projects + all allocations + hours consumed; passes to ProjectsClient; wrapped in `<Suspense>` (ProjectsClient uses `useSearchParams`) |
+| `app/(app)/projects/page.tsx` | `/projects` | Fetches projects + all allocations + hours consumed; passes to ProjectsClient; wrapped in `<Suspense>` (ProjectsClient uses `useSearchParams`); builds per-allocation rows (Resource, dates, Allocation %, Hours to Date, Total Hours) and groups them into Active/Upcoming/Ended via `lib/projectAllocationUtils.ts` as `allocationDetails` per project |
 | `app/(app)/conflicts/page.tsx` | `/conflicts` | Fetches 4-week allocations and calculates over-allocated engineers (no client component) |
 | `app/(app)/dashboard/page.tsx` | `/dashboard` | Executive dashboard — fetches divisions, users (incl. department), today's allocations, projects, leaves, pipeline; computes per-project `departmentHours`/`departmentAllocatedHours`; passes raw users/allocations/activeProjects/leaves arrays to DashboardClient for client-side Division+Role filtering |
 | `app/(app)/team/page.tsx` | `/team` | ADMIN only — fetches all users + divisions; passes to TeamClient |
@@ -45,7 +45,7 @@ These handle UI state, dropdowns, modals, CRUD calls. Always in a `*Client.tsx` 
 | `app/(app)/allocations/AllocationsClient.tsx` | `/allocations` | Interactive weekly grid — add/edit/delete allocations, division filter dropdown |
 | `app/(app)/allocation-list/AllocationListClient.tsx` | `/allocation-list` | Sortable/filterable allocation list — resource, project, division filters, inline edit |
 | `app/(app)/bench/BenchClient.tsx` | `/bench` | Bench table with KPI tiles; division/role/PM filter dropdowns; CSV export; compact simple+30 row layout |
-| `app/(app)/projects/ProjectsClient.tsx` | `/projects` | Project cards with status/hours/engineer breakdown, add/edit project modal, division filter; reads `?search=` URL param to pre-fill search box and pre-select a project (deep link from Executive Dashboard) |
+| `app/(app)/projects/ProjectsClient.tsx` | `/projects` | Project cards with status/hours/engineer breakdown, add/edit project modal, division filter; reads `?search=` URL param to pre-fill search box and pre-select a project (deep link from Executive Dashboard); "Allocations" tab shows per-allocation Resource/Start/End/Allocation %/Hours to Date/Total Hours in Active, Upcoming, and collapsible Ended sections |
 | `app/(app)/dashboard/DashboardClient.tsx` | `/dashboard` | Company KPIs, per-division utilisation bars, ending-soon table, pipeline summary; project names in "Top 10 Projects" table link to `/projects?search=<code>`; Top Projects table has an "Allocated" column alongside "Hours to Date"; Division + Role filters jointly re-scope all KPI tiles, Division Breakdown cards, and the Ending Soon panel (Pipeline always unfiltered) via `lib/dashboardUtils.ts` |
 | `app/(app)/team/TeamClient.tsx` | `/team` | Full team roster — search, filters, add/edit/deactivate member modal |
 | `app/(app)/divisions/DivisionsClient.tsx` | `/divisions` | Division CRUD — create/edit/delete divisions, color picker, owner assignment, "Merge into…" action to reassign all members/projects into another division |
@@ -164,6 +164,7 @@ These handle UI state, dropdowns, modals, CRUD calls. Always in a `*Client.tsx` 
 | `lib/batchBannerUtils.ts` | Pure helpers for the top "data last updated" banner: `formatRelativeTime`, `buildBatchBannerInfo`, `STALE_THRESHOLD_MS` |
 | `lib/accessUtils.ts` | Shared access-control predicate `canViewExecutiveDashboard(role, jobTitle)` — used by proxy.ts, dashboard page guard, and Sidebar nav |
 | `lib/dashboardUtils.ts` | Pure helpers for the Executive Dashboard's Division+Role filters: `filterUsers`, `computeUtilPct`, `computeBenchCount`, `computeActiveProjectCount`, `computeFilteredLeaveCount`, `filterEndingSoon`, `buildDivisionRoleStats` |
+| `lib/projectAllocationUtils.ts` | Pure helpers for the Projects page "Allocations" tab: `computeAllocationPct`, `categorizeAllocation`, `groupAllocationsByCategory` (Active/Upcoming/Ended) |
 | `proxy.ts` | Next.js middleware (runs on every request) — auth guard, role-based route protection |
 
 ---

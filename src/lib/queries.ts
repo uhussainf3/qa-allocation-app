@@ -220,28 +220,33 @@ export const getCachedConflictAllocations = (from: string, to: string) =>
 
 /**
  * All allocations for the Projects page — includes userId + userName for
- * the per-engineer "hours to date" breakdown tile.
+ * the per-engineer "hours to date" breakdown tile, plus `id` and
+ * `userCapacity` for the per-allocation "Allocations" tab (Active / Upcoming
+ * / Ended sections with Allocation % per row).
  */
 export const getCachedAllAllocationsForProjects = unstable_cache(
   async () => {
     const rows = await prisma.allocation.findMany({
       select: {
+        id:          true,
         projectId:   true,
         startDate:   true,
         endDate:     true,
         hoursPerDay: true,
         userId:      true,
-        user:        { select: { name: true, department: true } },
+        user:        { select: { name: true, department: true, capacity: true } },
       },
     });
     return rows.map((a) => ({
-      projectId:   a.projectId,
-      hoursPerDay: a.hoursPerDay,
-      startDate:   a.startDate.toISOString(),
-      endDate:     a.endDate.toISOString(),
-      userId:      a.userId,
-      userName:    a.user.name,
-      department:  a.user.department,
+      id:           a.id,
+      projectId:    a.projectId,
+      hoursPerDay:  a.hoursPerDay,
+      startDate:    a.startDate.toISOString(),
+      endDate:      a.endDate.toISOString(),
+      userId:       a.userId,
+      userName:     a.user.name,
+      department:   a.user.department,
+      userCapacity: a.user.capacity,
     }));
   },
   ["allocations-for-projects"],

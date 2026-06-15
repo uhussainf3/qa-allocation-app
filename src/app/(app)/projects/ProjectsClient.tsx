@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Role } from "@/types/enums";
+import type { ProjectAllocationRow, GroupedProjectAllocations } from "@/lib/projectAllocationUtils";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,7 @@ type Project = {
   divisionId: string | null; managerId: string | null;
   consumedHours: number; allocatedHours: number; hoursToDate: number;
   engineerBreakdown: EngineerBreakdown[];
+  allocationDetails: GroupedProjectAllocations<ProjectAllocationRow>;
   tasks: { id: string; name: string; estimatedHours: number; subtasks: { id: string; name: string; estimatedHours: number }[] }[];
   _count: { allocations: number; hoursLogs: number };
 };
@@ -56,6 +58,10 @@ const PRIORITY_META: Record<string, { label: string; color: string }> = {
   CRITICAL: { label: "Critical", color: "var(--bad)" },
 };
 const PRIORITIES = ["LOW","MEDIUM","HIGH","CRITICAL"];
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+}
 
 const BLANK_TASK = {
   name: "", description: "", assignedUserId: "",
@@ -89,7 +95,8 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
     }
     return initialProjects[0] ?? null;
   });
-  const [activeTab,     setActiveTab]     = useState<"overview"|"tasks">("overview");
+  const [activeTab,     setActiveTab]     = useState<"overview"|"tasks"|"allocations">("overview");
+  const [showEnded,     setShowEnded]     = useState(false);
   const [showModal,     setShowModal]     = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [form,          setForm]          = useState({ name:"", code:"", clientName:"", sanctionedHours:0, hourlyRate:0, color:COLORS[0], status:"ACTIVE", startDate:"", endDate:"", description:"", divisionId:"", managerId:"" });
@@ -120,7 +127,7 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
   }, [selected?.id, activeTab, loadTasks]);
 
   // ── Project CRUD ──────────────────────────────────────────────────────────
-  function selectProject(p: Project) { setSelected(p); setShowBreakdown(false); }
+  function selectProject(p: Project) { setSelected(p); setShowBreakdown(false); setShowEnded(false); }
 
   function openEdit() {
     if (!selected) return;
@@ -277,6 +284,10 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
   const allocPct   = proj?.sanctionedHours ? Math.round(proj.allocatedHours / proj.sanctionedHours * 100) : 0;
   const toDatePct  = proj?.sanctionedHours ? Math.round(proj.hoursToDate    / proj.sanctionedHours * 100) : 0;
 
+  const allocationTotal = proj
+    ? proj.allocationDetails.active.length + proj.allocationDetails.upcoming.length + proj.allocationDetails.ended.length
+    : 0;
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="page" data-screen-label="Projects">
@@ -372,14 +383,16 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
 
             {/* Tabs */}
             <div style={{ display:"flex", gap:0, borderBottom:"1px solid var(--border)", marginBottom:20 }}>
-              {(["overview","tasks"] as const).map((tab) => (
+              {(["overview","allocations","tasks"] as const).map((tab) => (
                 <button key={tab} onClick={() => setActiveTab(tab)} style={{
                   padding:"8px 18px", border:"none", background:"transparent",
                   borderBottom: activeTab===tab ? "2px solid var(--accent)" : "2px solid transparent",
                   color: activeTab===tab ? "var(--accent)" : "var(--text-secondary)",
                   fontWeight:500, fontSize:13, cursor:"pointer", textTransform:"capitalize",
                 }}>
-                  {tab === "tasks" ? `Tasks (${tasks.length})` : "Overview"}
+                  {tab === "tasks" ? `Tasks (${tasks.length})`
+                    : tab === "allocations" ? `Allocations (${allocationTotal})`
+                    : "Overview"}
                 </button>
               ))}
             </div>
@@ -498,6 +511,66 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
                   <div style={{ fontSize:13, color:"var(--text-secondary)", marginBottom:16 }}>{proj.description}</div>
                 )}
               </>
+            )}
+
+            {/* ── Allocations tab ── */}
+            {activeTab === "allocations" && (
+              <div style={{ flex:1 }}>
+                {allocationTotal === 0 ? (
+                  <div style={{ textAlign:"center", padding:"40px 0", color:"var(--text-muted)", fontSize:13 }}>
+                    No allocations for this project.
+                  </div>
+                ) : (
+                  <>
+                    {/* Active */}
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontWeight:600, fontSize:13, marginBottom:8 }}>
+                        Active ({proj.allocationDetails.active.length})
+                      </div>
+                      {proj.allocationDetails.active.length === 0 ? (
+                        <div style={{ fontSize:13, color:"var(--text-muted)" }}>No active allocations.</div>
+                      ) : (
+                        <AllocationTable rows={proj.allocationDetails.active} />
+                      )}
+                    </div>
+
+                    {/* Upcoming */}
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontWeight:600, fontSize:13, marginBottom:8 }}>
+                        Upcoming ({proj.allocationDetails.upcoming.length})
+                      </div>
+                      {proj.allocationDetails.upcoming.length === 0 ? (
+                        <div style={{ fontSize:13, color:"var(--text-muted)" }}>No upcoming allocations.</div>
+                      ) : (
+                        <AllocationTable rows={proj.allocationDetails.upcoming} />
+                      )}
+                    </div>
+
+                    {/* Ended — collapsible, collapsed by default */}
+                    <div>
+                      <div
+                        style={{
+                          fontWeight:600, fontSize:13, marginBottom:8,
+                          display:"flex", alignItems:"center", gap:8,
+                          cursor: proj.allocationDetails.ended.length>0 ? "pointer" : "default",
+                          userSelect:"none",
+                        }}
+                        onClick={() => proj.allocationDetails.ended.length>0 && setShowEnded((v) => !v)}
+                      >
+                        Ended ({proj.allocationDetails.ended.length})
+                        {proj.allocationDetails.ended.length>0 && (
+                          <span style={{ fontSize:11, fontWeight:400, color:"var(--text-muted)" }}>
+                            {showEnded ? "▲ hide" : "▼ show"}
+                          </span>
+                        )}
+                      </div>
+                      {showEnded && proj.allocationDetails.ended.length>0 && (
+                        <AllocationTable rows={proj.allocationDetails.ended} />
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
             )}
 
             {/* ── Tasks tab ── */}
@@ -773,6 +846,37 @@ export function ProjectsClient({ projects: initialProjects, currentUserRole, tea
         </div>
       )}
     </div>
+  );
+}
+
+// ─── AllocationTable sub-component ─────────────────────────────────────────────
+
+function AllocationTable({ rows }: { rows: ProjectAllocationRow[] }) {
+  return (
+    <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+      <thead>
+        <tr style={{ borderBottom:"1px solid var(--border)" }}>
+          <th style={{ textAlign:"left",  padding:"6px 8px", fontWeight:500, color:"var(--text-muted)" }}>Resource</th>
+          <th style={{ textAlign:"left",  padding:"6px 8px", fontWeight:500, color:"var(--text-muted)" }}>Start Date</th>
+          <th style={{ textAlign:"left",  padding:"6px 8px", fontWeight:500, color:"var(--text-muted)" }}>End Date</th>
+          <th style={{ textAlign:"right", padding:"6px 8px", fontWeight:500, color:"var(--text-muted)" }}>Allocation %</th>
+          <th style={{ textAlign:"right", padding:"6px 8px", fontWeight:500, color:"var(--text-muted)" }}>Hours to Date</th>
+          <th style={{ textAlign:"right", padding:"6px 8px", fontWeight:500, color:"var(--text-muted)" }}>Total Hours</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.id} style={{ borderBottom:"1px solid var(--border-faint)" }}>
+            <td style={{ padding:"7px 8px" }}>{r.userName ?? "Unknown"}</td>
+            <td style={{ padding:"7px 8px" }}>{formatDate(r.startDate)}</td>
+            <td style={{ padding:"7px 8px" }}>{formatDate(r.endDate)}</td>
+            <td style={{ padding:"7px 8px", textAlign:"right", fontFamily:"var(--mono)" }}>{r.allocationPct}%</td>
+            <td style={{ padding:"7px 8px", textAlign:"right", fontFamily:"var(--mono)" }}>{r.hoursToDate}h</td>
+            <td style={{ padding:"7px 8px", textAlign:"right", fontFamily:"var(--mono)" }}>{r.totalHours}h</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
