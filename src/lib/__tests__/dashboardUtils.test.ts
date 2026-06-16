@@ -247,31 +247,58 @@ describe("filterEndingSoon", () => {
 
 describe("buildDivisionRoleStats", () => {
   const users = [
-    user({ id: "u1", divisionId: "div-a", department: "Developer", capacity: 40 }),
+    user({ id: "u1", divisionId: "div-a", department: "Developer",   capacity: 40 }),
     user({ id: "u2", divisionId: "div-a", department: "QA Engineer", capacity: 40 }),
-    user({ id: "u3", divisionId: "div-b", department: "Developer", capacity: 40 }),
+    user({ id: "u3", divisionId: "div-b", department: "Developer",   capacity: 40 }),
   ];
 
-  it("computes headcount and utilisation per division with no role filter", () => {
-    const allocs = [alloc({ userId: "u1", hoursPerDay: 8 }), alloc({ userId: "u2", hoursPerDay: 4 })];
-    const result = buildDivisionRoleStats(["div-a", "div-b"], users, allocs, "");
+  const activeProjects = [
+    { id: "p1", divisionId: "div-a" },
+    { id: "p2", divisionId: "div-a" },
+    { id: "p3", divisionId: "div-b" },
+  ];
+
+  const defaultCounts: Record<string, number> = { "div-a": 50, "div-b": 20 };
+
+  it("uses defaultProjectCounts when no role filter is applied", () => {
+    const allocs = [alloc({ userId: "u1", projectId: "p1", hoursPerDay: 8 })];
+    const result = buildDivisionRoleStats(["div-a", "div-b"], users, allocs, activeProjects, defaultCounts, "");
     expect(result).toEqual([
-      { id: "div-a", headcount: 2, utilPct: 75 }, // (8+4)/(8+8) = 75%
-      { id: "div-b", headcount: 1, utilPct: 0 },
+      { id: "div-a", headcount: 2, utilPct: 50, projectCount: 50 },
+      { id: "div-b", headcount: 1, utilPct: 0,  projectCount: 20 },
     ]);
+  });
+
+  it("counts distinct division projects with role-filtered users when role filter is set", () => {
+    // u1 (Developer) is on p1 and p2; u2 (QA Engineer) is on p1 only
+    const allocs = [
+      alloc({ userId: "u1", projectId: "p1", hoursPerDay: 8 }),
+      alloc({ userId: "u1", projectId: "p2", hoursPerDay: 8 }),
+      alloc({ userId: "u2", projectId: "p1", hoursPerDay: 4 }),
+    ];
+    const result = buildDivisionRoleStats(["div-a"], users, allocs, activeProjects, defaultCounts, "QA Engineer");
+    // only u2 matches; u2 is on p1 which is in div-a → projectCount = 1
+    expect(result).toEqual([{ id: "div-a", headcount: 1, utilPct: 50, projectCount: 1 }]);
   });
 
   it("narrows headcount and utilisation to the role filter", () => {
-    const allocs = [alloc({ userId: "u1", hoursPerDay: 8 }), alloc({ userId: "u2", hoursPerDay: 4 })];
-    const result = buildDivisionRoleStats(["div-a", "div-b"], users, allocs, "Developer");
+    const allocs = [alloc({ userId: "u1", projectId: "p1", hoursPerDay: 8 }), alloc({ userId: "u2", projectId: "p1", hoursPerDay: 4 })];
+    const result = buildDivisionRoleStats(["div-a", "div-b"], users, allocs, activeProjects, defaultCounts, "Developer");
     expect(result).toEqual([
-      { id: "div-a", headcount: 1, utilPct: 100 }, // only u1 (Developer), 8/8 = 100%
-      { id: "div-b", headcount: 1, utilPct: 0 },   // u3 (Developer) has capacity but no allocation
+      { id: "div-a", headcount: 1, utilPct: 100, projectCount: 1 }, // u1 (Developer) on p1
+      { id: "div-b", headcount: 1, utilPct: 0,   projectCount: 0 }, // u3 (Developer) has no allocations
     ]);
   });
 
-  it("returns headcount 0 and utilPct 0 for a division with no matching members", () => {
-    const result = buildDivisionRoleStats(["div-a"], users, [], "Project Manager");
-    expect(result).toEqual([{ id: "div-a", headcount: 0, utilPct: 0 }]);
+  it("returns projectCount 0 for a division whose role-filtered users have no allocations", () => {
+    const result = buildDivisionRoleStats(["div-a"], users, [], activeProjects, defaultCounts, "Project Manager");
+    expect(result).toEqual([{ id: "div-a", headcount: 0, utilPct: 0, projectCount: 0 }]);
+  });
+
+  it("does not count a project from another division even if a matching user is allocated to it", () => {
+    // u1 is in div-a but allocated to p3 which is in div-b
+    const allocs = [alloc({ userId: "u1", projectId: "p3", hoursPerDay: 8 })];
+    const result = buildDivisionRoleStats(["div-a"], users, allocs, activeProjects, defaultCounts, "Developer");
+    expect(result).toEqual([{ id: "div-a", headcount: 1, utilPct: 100, projectCount: 0 }]);
   });
 });

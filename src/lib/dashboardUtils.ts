@@ -39,6 +39,7 @@ export interface DivisionRoleStat {
   id: string;
   headcount: number;
   utilPct: number;
+  projectCount: number;
 }
 
 /** Returns users matching the division filter (User.divisionId) and/or role filter (User.department). */
@@ -144,19 +145,45 @@ export function filterEndingSoon<T extends DashboardEndingSoonItem>(
   });
 }
 
-/** Recomputes per-division headcount + utilisation for the given Role filter. */
+/**
+ * Recomputes per-division headcount, utilisation, and project count for the
+ * given Role filter.
+ *
+ * projectCount:
+ *  - No role filter  → use the pre-fetched total from `defaultProjectCounts`
+ *    (the raw _count.projects from Prisma, covering all statuses).
+ *  - Role filter set → count distinct active projects in that division that
+ *    have at least one today's allocation from a user matching the role.
+ */
 export function buildDivisionRoleStats(
   divisionIds: string[],
   users: DashboardUser[],
   allocations: DashboardAllocation[],
+  activeProjects: DashboardActiveProject[],
+  defaultProjectCounts: Record<string, number>,
   roleFilter: string
 ): DivisionRoleStat[] {
   return divisionIds.map((id) => {
     const members = users.filter((u) => u.divisionId === id && (!roleFilter || u.department === roleFilter));
+
+    let projectCount: number;
+    if (!roleFilter) {
+      projectCount = defaultProjectCounts[id] ?? 0;
+    } else {
+      const userIds        = new Set(members.map((u) => u.id));
+      const divProjectIds  = new Set(activeProjects.filter((p) => p.divisionId === id).map((p) => p.id));
+      projectCount = new Set(
+        allocations
+          .filter((a) => userIds.has(a.userId) && divProjectIds.has(a.projectId))
+          .map((a) => a.projectId)
+      ).size;
+    }
+
     return {
       id,
       headcount: members.length,
-      utilPct: computeUtilPct(members, allocations),
+      utilPct:   computeUtilPct(members, allocations),
+      projectCount,
     };
   });
 }

@@ -134,16 +134,23 @@ export function DashboardClient({
     [leaves, filterDivision, roleFilter]
   );
 
-  // ── Division Breakdown cards — headcount/utilisation recomputed per Role filter ──
+  // ── Division Breakdown cards — headcount/utilisation/projectCount recomputed per Role filter ──
+  const defaultProjectCounts = useMemo(
+    () => Object.fromEntries(divStats.map((d) => [d.id, d.projectCount])),
+    [divStats]
+  );
+
   const divisionRoleStats = useMemo(
-    () => buildDivisionRoleStats(divStats.map((d) => d.id), users, allocations, roleFilter),
-    [divStats, users, allocations, roleFilter]
+    () => buildDivisionRoleStats(divStats.map((d) => d.id), users, allocations, activeProjects, defaultProjectCounts, roleFilter),
+    [divStats, users, allocations, activeProjects, defaultProjectCounts, roleFilter]
   );
 
   const visibleDivs = useMemo(() => {
     const merged = divStats.map((d) => {
       const roleStat = divisionRoleStats.find((r) => r.id === d.id);
-      return roleStat ? { ...d, headcount: roleStat.headcount, utilPct: roleStat.utilPct } : d;
+      return roleStat
+        ? { ...d, headcount: roleStat.headcount, utilPct: roleStat.utilPct, projectCount: roleStat.projectCount }
+        : d;
     });
     return filterDivision ? merged.filter((d) => d.id === filterDivision) : merged;
   }, [divStats, divisionRoleStats, filterDivision]);
