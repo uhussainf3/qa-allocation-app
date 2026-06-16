@@ -19,6 +19,7 @@ function user(over: Partial<DashboardUser> = {}): DashboardUser {
     divisionId: "div-a",
     department: "Developer",
     capacity: 40, // weekly hours -> 8/day
+    isOnshore: false,
     ...over,
   };
 }
@@ -111,6 +112,28 @@ describe("computeBenchCount", () => {
   it("never counts a user with zero capacity", () => {
     const users = [user({ id: "u1", capacity: 0 })];
     expect(computeBenchCount(users, [])).toBe(0);
+  });
+
+  it("excludes onshore users even when they have bench capacity (mirrors bench/page.tsx logic)", () => {
+    const users = [
+      user({ id: "u1", isOnshore: false, capacity: 40 }), // offshore — counted
+      user({ id: "u2", isOnshore: true,  capacity: 40 }), // onshore  — excluded
+    ];
+    // Neither has allocations today; only u1 (offshore) should be counted
+    expect(computeBenchCount(users, [])).toBe(1);
+  });
+
+  it("counts offshore users on bench and ignores onshore users regardless of allocation", () => {
+    const users = [
+      user({ id: "u1", isOnshore: false, capacity: 40 }), // offshore, partially allocated → bench
+      user({ id: "u2", isOnshore: true,  capacity: 40 }), // onshore → always excluded
+      user({ id: "u3", isOnshore: false, capacity: 40 }), // offshore, fully allocated → not on bench
+    ];
+    const allocs = [
+      alloc({ userId: "u1", hoursPerDay: 4 }), // 50% → on bench
+      alloc({ userId: "u3", hoursPerDay: 8 }), // 100% → NOT on bench
+    ];
+    expect(computeBenchCount(users, allocs)).toBe(1);
   });
 });
 

@@ -11,6 +11,7 @@ export interface DashboardUser {
   divisionId: string | null;
   department: string | null;
   capacity: number; // weekly capacity hours
+  isOnshore?: boolean; // onshore resources are excluded from bench (mirrors bench/page.tsx logic)
 }
 
 export interface DashboardAllocation {
@@ -64,9 +65,18 @@ export function computeUtilPct(users: DashboardUser[], allocations: DashboardAll
   return Math.round((allocatedHours / totalCapacity) * 100);
 }
 
-/** Count of users in the set who are not fully allocated today (capacity > 0 and allocated < capacity). */
+/**
+ * Count of users in the set who are not fully allocated today
+ * (capacity > 0 and allocated < capacity).
+ *
+ * Onshore users (isOnshore = true) are excluded to match the Bench screen,
+ * which does `allActiveUsers.filter((u) => !u.isOnshore)` before all bench
+ * calculations — that is why the Bench screen and Dashboard previously showed
+ * different numbers.
+ */
 export function computeBenchCount(users: DashboardUser[], allocations: DashboardAllocation[]): number {
   return users.filter((u) => {
+    if (u.isOnshore) return false; // mirrors bench/page.tsx exclusion
     const myHours = allocations
       .filter((a) => a.userId === u.id)
       .reduce((s, a) => s + a.hoursPerDay, 0);

@@ -39,7 +39,7 @@ export default async function DashboardPage() {
       isActive: true,
       OR: [{ jobTitle: null }, { jobTitle: { not: "VP" } }],
     },
-    select:  { id: true, name: true, email: true, role: true, jobTitle: true, capacity: true, divisionId: true, department: true },
+    select:  { id: true, name: true, email: true, role: true, jobTitle: true, capacity: true, divisionId: true, department: true, isOnshore: true },
     orderBy: { name: "asc" },
   });
 
@@ -187,7 +187,7 @@ export default async function DashboardPage() {
 
   // ── Data for client-side Division/Role filtering of KPI tiles ──────────────
   const usersForStats = allUsers.map((u) => ({
-    id: u.id, divisionId: u.divisionId, department: u.department, capacity: u.capacity,
+    id: u.id, divisionId: u.divisionId, department: u.department, capacity: u.capacity, isOnshore: u.isOnshore,
   }));
   const allocationsForStats = activeAllocations.map((a) => ({
     userId: a.userId, projectId: a.projectId, hoursPerDay: a.hoursPerDay,
