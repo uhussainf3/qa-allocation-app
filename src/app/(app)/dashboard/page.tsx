@@ -73,10 +73,11 @@ export default async function DashboardPage() {
     orderBy: { probability: "desc" },
   });
 
-  // Recent allocations ending soon (next 14 days)
+  // Recent allocations ending soon (next 14 days) — active users only
   const recentAllocations = await prisma.allocation.findMany({
     where: {
       endDate: { gte: today, lte: new Date(today.getTime() + 14 * 86400000) },
+      user:    { isActive: true },
     },
     select: {
       userId: true, endDate: true,
