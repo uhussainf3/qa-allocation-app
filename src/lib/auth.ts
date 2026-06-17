@@ -30,6 +30,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     },
   },
+  events: {
+    async signIn({ user }) {
+      await prisma.auditLog.create({
+        data: {
+          actorId: user.id ?? null,
+          action: "logged_in",
+          targetType: "User",
+          targetId: user.id ?? null,
+          details: user.email ?? undefined,
+        },
+      });
+    },
+  },
   pages: {
     signIn: "/login",
     error: "/login",

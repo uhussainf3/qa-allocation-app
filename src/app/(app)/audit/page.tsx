@@ -13,7 +13,7 @@ export default async function AuditPage() {
     take: 200,
   });
 
-  const ACTION_COLOR: Record<string, string> = { created: "ok", updated: "warn", deleted: "bad" };
+  const ACTION_COLOR: Record<string, string> = { created: "ok", updated: "warn", deleted: "bad", logged_in: "idle" };
 
   return (
     <div className="page" data-screen-label="Activity log">
@@ -43,7 +43,7 @@ export default async function AuditPage() {
                   <span className={`chip chip-${ACTION_COLOR[l.action] ?? "idle"}`}>{l.action}</span>
                 </td>
                 <td style={{ padding: "10px 8px", color: "var(--text-secondary)" }}>
-                  {l.targetType} {l.targetId?.slice(0, 8)}
+                  {l.action === "logged_in" ? (l.details ?? l.targetType) : `${l.targetType} ${l.targetId?.slice(0, 8)}`}
                 </td>
               </tr>
             ))}
