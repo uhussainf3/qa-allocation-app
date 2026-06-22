@@ -979,28 +979,46 @@ function WeeklyUpload() {
     if (!file || rows.length === 0) return;
     setPhase("confirming");
     try {
-      const res  = await fetch("/api/import/allocations", {
+      const res = await fetch("/api/import/allocations", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ label: batchLabel, sourceFile: file.name, rows }),
       });
-      const text = await res.text();
-      let data: { created?: number; updated?: number; employeesAutoCreated?: AutoCreated[]; projectsAutoCreated?: AutoCreated[]; errors?: { row: number; message: string }[]; error?: string } = {};
-      try { data = JSON.parse(text); } catch {
-        setParseError(`Import failed: server error (${res.status}). Check the server logs.`);
+      if (!res.ok) {
+        const text = await res.text();
+        let errMsg = `Import failed with status ${res.status}.`;
+        try { errMsg = (JSON.parse(text) as { error?: string }).error ?? errMsg; } catch { /* ignore */ }
+        setParseError(errMsg);
         setPhase("preview");
         return;
       }
-      if (!res.ok) {
-        setParseError(data.error ?? `Import failed with status ${res.status}.`);
-        setPhase("preview");
-        return;
+      // Real import streams ndjson — read line by line until the "done" event
+      const reader  = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let data: { created?: number; updated?: number; employeesAutoCreated?: AutoCreated[]; projectsAutoCreated?: AutoCreated[]; errors?: { row: number; message: string }[] } = {};
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl;
+        while ((nl = buffer.indexOf("\n")) >= 0) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (!line) continue;
+          const evt = JSON.parse(line) as
+            | { type: "progress"; phase: string; done: number; total: number }
+            | { type: "done"; result: Record<string, unknown> }
+            | { type: "error"; message: string };
+          if (evt.type === "done") data = evt.result as typeof data;
+          else if (evt.type === "error") throw new Error(evt.message);
+        }
       }
       setResult({
-        created:              data.created              ?? 0,
-        updated:              data.updated              ?? 0,
-        employeesAutoCreated: data.employeesAutoCreated ?? [],
-        projectsAutoCreated:  data.projectsAutoCreated  ?? [],
-        errors:               data.errors               ?? [],
+        created:              (data.created              as number)         ?? 0,
+        updated:              (data.updated              as number)         ?? 0,
+        employeesAutoCreated: (data.employeesAutoCreated as AutoCreated[])  ?? [],
+        projectsAutoCreated:  (data.projectsAutoCreated  as AutoCreated[])  ?? [],
+        errors:               (data.errors               as { row: number; message: string }[]) ?? [],
       });
       setPhase("done");
     } catch (e) {
